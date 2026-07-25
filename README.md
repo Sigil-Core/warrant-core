@@ -51,8 +51,9 @@ The package intentionally exposes two distinct profiles. Their different sort ru
 
 Use `canonicalizePolicyObject` and `hashPolicy` for an existing Sigil Warrant `policyHash`.
 
-- Object keys sort with JavaScript `localeCompare` pinned to `en-US`; distinct
-  collation-equal keys use UTF-16 code-unit order as a deterministic tie-breaker.
+- Object keys use JavaScript's stable `localeCompare` ordering pinned to `en-US`
+  with variant sensitivity, lexical number handling, and locale-default case order. Collation-equal
+  keys retain their insertion order for compatibility with established hashes.
 - Array order stays unchanged.
 - Object properties with `undefined` values are omitted.
 - `null`, strings, booleans, and finite numbers serialize as JSON.
@@ -126,7 +127,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against Sigil Sign commit `53b891e0e79aba17e1191854373f4bde1ae42ab4`. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against Sigil Sign commit `51ffd188eed7e53c5e2db8374f7bbc8bee41300a`. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign
@@ -134,7 +135,7 @@ npm run test:sign-parity -- /absolute/path/to/sigil-sign
 
 The gate signs only with the published RFC 8032 test key. It compares all six pinned canonical policies plus the parser edge-case corpus against Sigil Sign's compiled parser. It never reads an operator or production key.
 
-That frozen corpus records two legacy EVM compatibility behaviors from the pinned Sign parser: decimal fields accept a leading numeric prefix, and chain entries use their leading integer while filtering nonpositive or nonnumeric results. The package preserves those results for byte-for-byte consumer parity. Treat `parsePolicyMarkdown` as a Sign compatibility parser, not as a standalone lexical validator. Tightening either behavior requires a coordinated Sign parser change, new frozen vectors, and synchronized consumer releases.
+That frozen corpus records legacy parser compatibility behaviors from the pinned Sign parser: decimal fields accept a leading numeric prefix, and chain entries use their leading integer while filtering nonpositive or nonnumeric results. Enforced Policy 2.x soft-limit decimals retain that prefix behavior while checking the exact captured numeric value against the aggregate-counter bound before Number conversion, then applying the deployed parser's normalized six-decimal validation. Treat `parsePolicyMarkdown` as a compatibility parser with explicit hardening, not as a standalone lexical validator. Changing a frozen behavior requires coordinated parser changes, new vectors, and synchronized consumer releases.
 
 ## Release and npm trusted publishing
 

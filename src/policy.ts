@@ -1,4 +1,5 @@
 import type { ParsedPolicy } from "./types.js";
+import { maskHtmlComments } from "./html-comments.js";
 import { splitSignatureBlock } from "./signature.js";
 
 const HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]);
@@ -7,6 +8,8 @@ const KNOWN_SECTIONS = new Set(["evm", "tool_calls", "custom", "mcp", "soft_limi
 const RESOURCE_SECTIONS = new Set(["repository", "filesystem", "git", "database"]);
 const ACTION_PATTERN = (value: string) => Boolean(value) && (!value.includes("*") || (value.endsWith("*") && value.indexOf("*") === value.length - 1));
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+const MAX_COUNTER_MICROS = 9_223_372_036_854_775_807n;
+const RESERVED_PROFILE_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 const FILESYSTEM_EFFECTS = new Set(["read", "create", "overwrite", "append", "truncate", "delete", "rename", "copy", "hard_link", "symlink", "chmod", "chown", "xattr", "execute", "egress"]);
 const GIT_OPERATIONS = new Set(["status", "diff", "log", "add", "commit", "fetch", "pull_ff_only", "push_fast_forward", "create_branch", "create_tag", "reset_hard", "clean", "rewrite_history", "delete_ref", "force_push", "mirror_push", "prune_remote", "change_remote", "change_protection", "change_credentials", "delete_repository"]);
 const DATABASE_OPERATIONS = new Set(["select", "insert", "update", "merge", "delete", "truncate", "create_table", "drop_table", "add_column", "drop_column", "alter_column_type", "add_constraint", "drop_constraint", "create_index", "drop_index", "create_schema", "drop_schema", "create_database", "alter_database", "drop_database", "create_routine", "replace_routine", "execute_routine", "change_trigger", "change_row_security", "grant", "revoke", "create_extension"]);
@@ -85,14 +88,6 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
 
 interface Section { name: string; body: string; }
 
-function maskHtmlComments(markdown: string): string {
-  const masked = markdown.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, " "));
-  if (masked.includes("<!--") || masked.includes("-->")) {
-    throw new Error("Unterminated HTML comment in policy");
-  }
-  return masked;
-}
-
 function sectionsOf(markdown: string): Section[] {
   const headers = [...markdown.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => ({ name: match[1]!.trim().toLowerCase(), start: match.index!, end: match.index! + match[0].length }));
   const seen = new Set<string>();
@@ -146,11 +141,16 @@ function parseVersion(markdown: string): string {
       continue;
     }
     const unquotedMarkdown = trimmed.replace(/^(?:[-*+>]\s*)+/, "");
-    if (/^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)) {
+    if (
+      /^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)
+      || /^version\s+[^A-Za-z0-9\s:=]+(?=\s*(?::|=)|\s+\d+\.\d+\.\d+(?:\s|$))/i.test(
+        unquotedMarkdown,
+      )
+    ) {
       throw new Error(`Invalid root version declaration: ${trimmed}`);
     }
-    if (/^version\s*[^A-Za-z0-9\s:=]+\s*[:=]/i.test(unquotedMarkdown)) {
-      throw new Error(`Invalid root version declaration: ${trimmed}`);
+    if (/^version[^A-Za-z0-9\s:=]+(?=\s*(?::|=)|\s+\d+\.\d+\.\d+(?:\s|$))/i.test(unquotedMarkdown)) {
+      throw new Error(`Unrecognized root policy field: ${trimmed}`);
     }
     const rootKey = unquotedMarkdown.match(/^([A-Za-z][\w-]*)(?:\s*[:=]|\s+\d+\.\d+\.\d+(?:\s|$))/)?.[1];
     if (rootKey && isLikelyVersionKeyTypo(rootKey)) {
@@ -386,16 +386,26 @@ function actionList(value: string, key: string): string[] { const values = list(
 function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 
 function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown> {
-  const result: Record<string, unknown> = {}; const caps: Record<string, Record<string, unknown>> = {}; const genericControls = new Set<string>();
+  const result: Record<string, unknown> = {}; const caps = Object.create(null) as Record<string, Record<string, unknown>>; const genericControls = new Set<string>();
   let hasLimit = false;
   for (const line of lines) {
     const cap = line.match(/^cap\.([A-Za-z0-9_-]+)\.(max_count|max_sum_usd|window|action|group_by|amount_field):\s*(.*?)\s*$/);
-    if (cap) { if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0"); const profile = caps[cap[1]!] ??= {}; const field = cap[2]!; if (field in profile) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`); const value = unquote(cap[3]!); if (field === "max_count") { if (!positiveInt(value)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(value); } else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; } else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; } else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; } else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`); else profile.amountField = required(value, `cap.${cap[1]}.amount_field`); continue; }
+    if (cap) { if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0"); if (RESERVED_PROFILE_NAMES.has(cap[1]!)) throw new Error(`Reserved soft_limits cap name: ${cap[1]}`); const profile = caps[cap[1]!] ??= {}; const field = cap[2]!; if (field in profile) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`); const rawValue = cap[3]!.trim(); const value = unquote(rawValue); if (field === "max_count") { if (!positiveInt(rawValue)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(rawValue); } else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; } else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; } else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; } else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`); else profile.amountField = required(value, `cap.${cap[1]}.amount_field`); continue; }
     if (line.startsWith("cap.")) throw new Error(`Unrecognized soft_limits policy key: ${line.split(":", 1)[0]}`);
     const [key, value] = requireKeyValue(line, "soft_limits");
     if (parseGenericControl(result, key, value, isV2, genericControls)) continue;
-    if (key === "daily_tool_calls") { if (isV2 && !positiveInt(value)) throw new Error("daily_tool_calls must be a positive integer under version 2.0.0"); result.dailyToolCalls = integer(value); hasLimit = true; }
-    else if (key === "daily_evm_limit_eth") { if (isV2 && !positiveDecimal(value)) throw new Error("daily_evm_limit_eth must be a positive decimal with at most 6 places under version 2.0.0"); result.dailyEvmLimitEth = number(value); hasLimit = true; }
+    if (key === "daily_tool_calls") {
+      const parsed = integer(value);
+      if (parsed === undefined || parsed <= 0 || (isV2 && !positiveInt(value))) throw new Error("daily_tool_calls must be a positive integer");
+      result.dailyToolCalls = parsed;
+      hasLimit = true;
+    }
+    else if (key === "daily_evm_limit_eth") {
+      const parsed = isV2 ? dailyEvmLimit(value) : number(value);
+      if (parsed === undefined || parsed <= 0) throw new Error("daily_evm_limit_eth must be a positive decimal with at most 6 places");
+      result.dailyEvmLimitEth = parsed;
+      hasLimit = true;
+    }
     else throw new Error(`Unrecognized soft_limits policy key: ${key}`);
   }
   for (const [name, cap] of Object.entries(caps)) { if ((cap.maxCount === undefined) === (cap.maxSumUsd === undefined)) throw new Error(`cap.${name} requires exactly one of max_count or max_sum_usd`); if (!cap.window || !cap.action) throw new Error(`cap.${name}.window and cap.${name}.action are required`); if (cap.maxSumUsd !== undefined && !cap.amountField) throw new Error(`cap.${name}.amount_field is required for sum caps`); if (cap.maxCount !== undefined && cap.amountField) throw new Error(`cap.${name}.amount_field is not valid for count caps`); }
@@ -409,21 +419,23 @@ function parseExecutionLimits(lines: string[], isV2: boolean): Record<string, un
   let hasLimit = false;
   for (const [key, value] of unique(lines, "execution_limits")) {
     if (parseGenericControl(result, key, value, isV2)) continue;
-    if (key === "max_tool_calls_per_task" && positiveInt(value)) {
+    if (key === "max_tool_calls_per_task") {
+      if (!positiveInt(value)) throw new Error("max_tool_calls_per_task must be a positive integer");
       result.maxToolCallsPerTask = Number(value);
       hasLimit = true;
-    } else if (key === "max_tool_calls_per_hour" && positiveInt(value)) {
+    } else if (key === "max_tool_calls_per_hour") {
+      if (!positiveInt(value)) throw new Error("max_tool_calls_per_hour must be a positive integer");
       result.maxToolCallsPerHour = Number(value);
       hasLimit = true;
-    } else if (key === "max_model_spend_usd_per_task" && positiveDecimal(value)) {
+    } else if (key === "max_model_spend_usd_per_task") {
+      if (!positiveDecimal(value)) throw new Error("max_model_spend_usd_per_task must be a positive decimal with at most 6 places");
       result.maxModelSpendUsdPerTask = unquote(value);
       hasLimit = true;
-    } else if (key === "max_model_tokens_per_task" && positiveInt(value)) {
+    } else if (key === "max_model_tokens_per_task") {
+      if (!positiveInt(value)) throw new Error("max_model_tokens_per_task must be a positive integer");
       result.maxModelTokensPerTask = Number(value);
       hasLimit = true;
-    } else {
-      throw new Error(`Unrecognized execution_limits policy key: ${key}`);
-    }
+    } else throw new Error(`Unrecognized execution_limits policy key: ${key}`);
   }
   return hasLimit ? result : {};
 }
@@ -477,6 +489,46 @@ function isCanonicalRoot(value: string): boolean {
   return value === "." || value === "/" || (value.startsWith("/") && !value.endsWith("/") && !value.includes("//") && value.split("/").every((segment) => segment !== "." && segment !== ".."));
 }
 function positiveInt(value: string): boolean { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; }
-function positiveDecimal(value: string): boolean { return /^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(unquote(value.trim())) && Number(unquote(value.trim())) > 0; }
+function dailyEvmLimit(value: string): number | undefined {
+  const raw = value.trim();
+  const prefix = raw.match(/^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?/);
+  if (!prefix) return undefined;
+  const whole = prefix[1] ?? "0";
+  const fraction = prefix[2] ?? prefix[3] ?? "";
+  const coefficient = BigInt(`${whole}${fraction}`);
+  if (coefficient <= 0n) return undefined;
+  const exponent = Number(prefix[4] ?? "0");
+  if (!Number.isSafeInteger(exponent)) {
+    if (!prefix[4]?.startsWith("-")) return undefined;
+  } else {
+    const microsScale = exponent - fraction.length + 6;
+    const coefficientDigits = coefficient.toString();
+    const maximumDigits = MAX_COUNTER_MICROS.toString();
+    if (microsScale >= 0) {
+      const scaledLength = coefficientDigits.length + microsScale;
+      if (scaledLength > maximumDigits.length) return undefined;
+      if (scaledLength === maximumDigits.length && `${coefficientDigits}${"0".repeat(microsScale)}` > maximumDigits) return undefined;
+    } else {
+      const divisorPlaces = -microsScale;
+      const maximumScaledLength = maximumDigits.length + divisorPlaces;
+      if (coefficientDigits.length > maximumScaledLength) return undefined;
+      if (coefficientDigits.length === maximumScaledLength) {
+        const leadingDigits = coefficientDigits.slice(0, maximumDigits.length);
+        if (leadingDigits > maximumDigits) return undefined;
+        if (leadingDigits === maximumDigits && /[1-9]/.test(coefficientDigits.slice(maximumDigits.length))) return undefined;
+      }
+    }
+  }
+  const parsed = number(value);
+  if (parsed === undefined || parsed <= 0) return undefined;
+  const normalized = String(parsed);
+  if (!/^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(normalized)) return undefined;
+  return parsed;
+}
+function positiveDecimal(value: string): boolean {
+  const raw = value.trim();
+  const parsed = Number(raw);
+  return /^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(raw) && Number.isFinite(parsed) && parsed > 0;
+}
 function required(value: string, key: string): string { if (!value) throw new Error(`${key} must not be empty`); return value; }
 function removeEmpty(policy: ParsedPolicy): ParsedPolicy { for (const key of Object.keys(policy) as Array<keyof ParsedPolicy>) if (key !== "version" && policy[key] && typeof policy[key] === "object" && !Object.keys(policy[key] as object).length) delete policy[key]; return policy; }

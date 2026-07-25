@@ -2,22 +2,10 @@ import type { CryptoAdapter } from "./types.js";
 
 const encoder = new TextEncoder();
 
-/**
- * Existing Warrant policy hashes use localeCompare ordering. Pin the established
- * en-US collation and break collation-equal ties by UTF-16 code units so distinct
- * keys cannot inherit insertion order. This remains separate from pg-commit-v1.
- */
+/** Existing Warrant policy hashes use stable en-US localeCompare ordering. */
 export function canonicalizePolicyObject(value: unknown): string {
   return serializePolicy(value);
 }
-
-const comparePolicyKeys = (left: string, right: string): number => {
-  const collated = left.localeCompare(right, "en-US");
-  if (collated !== 0) return collated;
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
-};
 
 function serializePolicy(value: unknown): string {
   if (value === null) return "null";
@@ -28,7 +16,11 @@ function serializePolicy(value: unknown): string {
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([, entry]) => entry !== undefined)
-      .sort(([left], [right]) => comparePolicyKeys(left, right));
+      .sort(([left], [right]) => left.localeCompare(right, "en-US", {
+        sensitivity: "variant",
+        numeric: false,
+        caseFirst: "false",
+      }));
     return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${serializePolicy(entry)}`).join(",")}}`;
   }
   return "null";

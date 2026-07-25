@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "21bd500850559e4197f063cfe1b94392d820f954",
+  "sigilSignCommit": "51ffd188eed7e53c5e2db8374f7bbc8bee41300a",
   "cases": [
     {
       "id": "evm-default-max-transaction",
@@ -36,6 +36,120 @@
       "id": "soft-limit-controls-without-enforced-limit",
       "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## soft_limits\nrequire_approval: bash\nrequire_shim: true",
       "outcome": "reject"
+    },
+    {
+      "id": "soft-limit-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "dailyEvmLimitEth": 1
+        }
+      }
+    },
+    {
+      "id": "soft-limit-quoted-number",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: \"1\"",
+      "outcome": "reject"
+    },
+    {
+      "id": "soft-limit-below-bound-source-overprecision",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "dailyEvmLimitEth": 9000000000000
+        }
+      }
+    },
+    {
+      "id": "legacy-invalid-daily-tool-limit",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "legacy-invalid-daily-evm-limit",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "legacy-daily-tool-limit-prefix",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: 1calls",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "1.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        },
+        "soft_limits": {
+          "dailyToolCalls": 1
+        }
+      }
+    },
+    {
+      "id": "legacy-daily-evm-limit-precision",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "1.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        },
+        "soft_limits": {
+          "dailyEvmLimitEth": 1.0000001
+        }
+      }
+    },
+    {
+      "id": "reserved-soft-limit-cap-name",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.__proto__.max_count: 1\ncap.__proto__.window: day\ncap.__proto__.action: email.send",
+      "outcome": "reject"
+    },
+    {
+      "id": "inherited-soft-limit-cap-name",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.toString.max_count: 1\ncap.toString.window: day\ncap.toString.action: email.send",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "caps": {
+            "toString": {
+              "maxCount": 1,
+              "window": "day",
+              "action": "email.send"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "quoted-soft-limit-max-count",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: \"1\"\ncap.requests.window: day\ncap.requests.action: email.send",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-soft-limit-max-sum",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.budget.max_sum_usd: \"1.25\"\ncap.budget.window: day\ncap.budget.action: email.send\ncap.budget.amount_field: amount_usd",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "caps": {
+            "budget": {
+              "maxSumUsd": "1.25",
+              "window": "day",
+              "action": "email.send",
+              "amountField": "amount_usd"
+            }
+          }
+        }
+      }
     },
     {
       "id": "execution-limit-zero",
@@ -249,6 +363,16 @@
     {
       "id": "punctuated-root-version",
       "markdown": "version--: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "punctuated-space-root-version",
+      "markdown": "version-- 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "spaced-punctuation-root-version",
+      "markdown": "version .: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
       "outcome": "reject"
     },
     {

@@ -98,6 +98,10 @@ jobs:
             package/dist/crypto/workers.d.ts.map \
             package/dist/crypto/workers.js \
             package/dist/crypto/workers.js.map \
+            package/dist/html-comments.d.ts \
+            package/dist/html-comments.d.ts.map \
+            package/dist/html-comments.js \
+            package/dist/html-comments.js.map \
             package/dist/index.d.ts \
             package/dist/index.d.ts.map \
             package/dist/index.js \

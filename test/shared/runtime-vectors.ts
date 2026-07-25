@@ -14,6 +14,7 @@ import {
 import type { CryptoAdapter, JsonValue } from "../../src/types.js";
 import launchScenarioFixture from "../vectors/launch-scenarios.json";
 import commitmentFixture from "../vectors/pg-commit-v1.json";
+import genericControlParityFixture from "../vectors/generic-control-parity.json";
 import policyFixture from "../vectors/policy-fixtures.json";
 import sigilSignParserParityFixture from "../vectors/sigil-sign-parser-parity.json";
 import signatureFixture from "../vectors/signature-blocks.json";
@@ -70,12 +71,46 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
     );
   });
 
-  it(`uses a deterministic Warrant collation tie-breaker in ${runtime}`, () => {
+  it(`preserves insertion order for established collation-equal Warrant keys in ${runtime}`, () => {
     const first = { chainActions: { "a\u00ad": ["x"], a: ["x"] } };
     const reversed = { chainActions: { a: ["x"], "a\u00ad": ["x"] } };
-    const expected = "{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}";
-    expect(canonicalizePolicyObject(first)).toBe(expected);
-    expect(canonicalizePolicyObject(reversed)).toBe(expected);
+    expect(canonicalizePolicyObject(first)).toBe("{\"chainActions\":{\"a\u00ad\":[\"x\"],\"a\":[\"x\"]}}");
+    expect(canonicalizePolicyObject(reversed)).toBe("{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}");
+  });
+
+  it(`pins en-US ordering for case-distinct Warrant keys in ${runtime}`, () => {
+    expect(canonicalizePolicyObject({ caps: { I: 1, i: 1 } })).toBe(
+      "{\"caps\":{\"i\":1,\"I\":1}}",
+    );
+  });
+
+  it(`ignores signature-like headings inside closed HTML comments in ${runtime}`, () => {
+    const unsigned = "version: 2.0.0\n\n<!--\n## signature\nsigil-sig: fake\n-->\n\n## tool_calls\nallowed: bash";
+    expect(splitSignatureBlock(unsigned)).toEqual({ unsigned });
+    const signed = appendSignatureBlock(unsigned, "abc_DEF-123");
+    expect(splitSignatureBlock(signed)).toEqual({ unsigned, signature: "abc_DEF-123" });
+    expect(parsePolicyMarkdown(signed)).toEqual({
+      version: "2.0.0",
+      tool_calls: { allowed: ["bash"] },
+    });
+    const unterminated = "version: 2.0.0\n<!--\n## signature";
+    expect(() => splitSignatureBlock(unterminated)).toThrow("Unterminated HTML comment");
+    expect(() => appendSignatureBlock(unterminated, "abc")).toThrow("Unterminated HTML comment");
+  });
+
+  it(`validates version 2 daily EVM decimals before number conversion in ${runtime}`, () => {
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
+    expect(() => parsePolicyMarkdown('version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: "1"')).toThrow("positive decimal");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001").soft_limits?.dailyEvmLimitEth).toBe(9_000_000_000_000);
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775807").soft_limits?.dailyEvmLimitEth).toBe(Number("9223372036854.775807"));
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775808")).toThrow("positive decimal");
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
+  });
+
+  it(`matches generic approval and shim controls in ${runtime}`, () => {
+    const parsed = parsePolicyMarkdown(genericControlParityFixture.markdown);
+    expect(parsed).toEqual(genericControlParityFixture.canonicalPolicy);
+    expect(canonicalizePolicyObject(parsed)).toBe(genericControlParityFixture.canonicalPolicyJson);
   });
 
   describe(`${runtime} shared policy, commitment, and signature vectors`, () => {

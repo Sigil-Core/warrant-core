@@ -63,12 +63,17 @@ describe("warranty.md parser", () => {
     );
   });
 
-  it("uses a deterministic tie-breaker for collation-equal policy keys", () => {
+  it("preserves insertion order for established collation-equal policy keys", () => {
     const first = { chainActions: { "a\u00ad": ["x"], a: ["x"] } };
     const reversed = { chainActions: { a: ["x"], "a\u00ad": ["x"] } };
-    const expected = "{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}";
-    expect(canonicalizePolicyObject(first)).toBe(expected);
-    expect(canonicalizePolicyObject(reversed)).toBe(expected);
+    expect(canonicalizePolicyObject(first)).toBe("{\"chainActions\":{\"a\u00ad\":[\"x\"],\"a\":[\"x\"]}}");
+    expect(canonicalizePolicyObject(reversed)).toBe("{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}");
+  });
+
+  it("pins en-US ordering for case-distinct policy keys", () => {
+    expect(canonicalizePolicyObject({ caps: { I: 1, i: 1 } })).toBe(
+      "{\"caps\":{\"i\":1,\"I\":1}}",
+    );
   });
 
   it("parses all canonical fixture policies and preserves their policy hashes", async () => {
@@ -95,7 +100,18 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown(`versoin: 2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
     expect(() => parsePolicyMarkdown(`versoin=2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
     expect(() => parsePolicyMarkdown(`versoin 2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
-    for (const declaration of ["version:", "version : 2.0.0", "version=2.0.0", "version.: 2.0.0", "version .: 2.0.0", "version--: 2.0.0", "version_: 2.0.0", "version", "- version: 2.0.0", "> version: 2.0.0"]) {
+    for (const declaration of ["version:", "version : 2.0.0", "version=2.0.0", "version", "- version: 2.0.0", "> version: 2.0.0"]) {
+      expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Invalid root version declaration");
+    }
+    for (const declaration of ["version.: 2.0.0", "version--: 2.0.0", "version_: 2.0.0", "version-- 2.0.0"]) {
+      expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
+    }
+    for (const declaration of [
+      "version .: 2.0.0",
+      "version . : 2.0.0",
+      "version / = 2.0.0",
+      "version -- 2.0.0",
+    ]) {
       expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Invalid root version declaration");
     }
     expect(() => parsePolicyMarkdown(`version: 2.0.0\nversion: 2.0.0${permissiveLegacyBody}`)).toThrow("Duplicate version");
@@ -195,8 +211,9 @@ describe("warranty.md parser", () => {
   });
 
   it("fails closed for invalid execution limit values", () => {
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 0")).toThrow("Unrecognized execution_limits");
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_model_spend_usd_per_task: nope")).toThrow("Unrecognized execution_limits");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 0")).toThrow("must be a positive integer");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_model_spend_usd_per_task: nope")).toThrow("must be a positive decimal");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nunknown_limit: 1")).toThrow("Unrecognized execution_limits policy key");
   });
 
   it("matches Sigil Sign by rejecting soft limit controls without an enforced limit", () => {
@@ -207,6 +224,37 @@ describe("warranty.md parser", () => {
       "require_approval: bash",
       "require_shim: true",
     ].join("\n"))).toThrow("must declare at least one enforced limit");
+    const overflowingDecimal = `1${"0".repeat(400)}`;
+    expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: ${overflowingDecimal}`)).toThrow("positive decimal");
+    expect(() => parsePolicyMarkdown('version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: "1"')).toThrow("positive decimal");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: '1'")).toThrow("positive decimal");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001").soft_limits?.dailyEvmLimitEth).toBe(9_000_000_000_000);
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775807").soft_limits?.dailyEvmLimitEth).toBe(Number("9223372036854.775807"));
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775808")).toThrow("positive decimal");
+    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope")).toThrow("positive integer");
+    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope")).toThrow("positive decimal");
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: 1calls").soft_limits?.dailyToolCalls).toBe(1);
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001").soft_limits?.dailyEvmLimitEth).toBe(1.0000001);
+    const inheritedCapPolicy = parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ncap.toString.max_count: 1\ncap.toString.window: day\ncap.toString.action: email.send");
+    const inheritedCaps = inheritedCapPolicy.soft_limits?.caps as Record<string, Record<string, unknown>>;
+    expect(Object.getPrototypeOf(inheritedCaps)).toBeNull();
+    expect(inheritedCaps.toString).toEqual({ maxCount: 1, window: "day", action: "email.send" });
+    expect(() => parsePolicyMarkdown('version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: "1"\ncap.requests.window: day\ncap.requests.action: email.send')).toThrow("max_count must be a positive integer");
+    expect(parsePolicyMarkdown('version: 2.0.0\n\n## soft_limits\ncap.budget.max_sum_usd: "1.25"\ncap.budget.window: day\ncap.budget.action: email.send\ncap.budget.amount_field: amount_usd').soft_limits?.caps).toEqual({
+      budget: {
+        maxSumUsd: "1.25",
+        window: "day",
+        action: "email.send",
+        amountField: "amount_usd",
+      },
+    });
+    for (const name of ["__proto__", "constructor", "prototype"]) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## soft_limits\ncap.${name}.max_count: 1\ncap.${name}.window: day\ncap.${name}.action: email.send`)).toThrow("Reserved soft_limits cap name");
+    }
+    expect(inheritedCaps.missing).toBeUndefined();
+    expect(Object.prototype).not.toHaveProperty("maxCount");
   });
 
   it("matches Sigil Sign EVM defaults and required allowlists", () => {
@@ -304,5 +352,24 @@ describe("signature blocks", () => {
     expect(() => splitSignatureBlock("## signature\nSIGIL-SIG: abc")).toThrow("only sigil-sig");
     expect(() => splitSignatureBlock("## signature\nsigil-sig: abc.def")).toThrow("only sigil-sig");
     expect(() => splitSignatureBlock("## signature\nsigil-sig: ")).toThrow("only sigil-sig");
+  });
+
+  it("ignores signature-like headings inside closed HTML comments", () => {
+    const unsigned = "version: 2.0.0\n\n<!--\n## signature\nsigil-sig: fake\n-->\n\n## tool_calls\nallowed: bash";
+    expect(splitSignatureBlock(unsigned)).toEqual({ unsigned });
+    const signed = appendSignatureBlock(unsigned, "abc_DEF-123");
+    expect(splitSignatureBlock(signed)).toEqual({ unsigned, signature: "abc_DEF-123" });
+    expect(parsePolicyMarkdown(signed)).toEqual({
+      version: "2.0.0",
+      tool_calls: { allowed: ["bash"] },
+    });
+
+    const commentAfterSignature = "version: 2.0.0\n\n## signature\nsigil-sig: abc\n\n<!--\n## evm\nallowed_actions: *\n-->";
+    expect(splitSignatureBlock(commentAfterSignature)).toEqual({
+      unsigned: "version: 2.0.0",
+      signature: "abc",
+    });
+    expect(() => splitSignatureBlock("version: 2.0.0\n<!--\n## signature")).toThrow("Unterminated HTML comment");
+    expect(() => appendSignatureBlock("version: 2.0.0\n<!--\n## signature", "abc")).toThrow("Unterminated HTML comment");
   });
 });
