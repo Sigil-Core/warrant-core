@@ -11,13 +11,13 @@ export function canonicalizePolicyObject(value: unknown): string {
   return serializePolicy(value);
 }
 
-function comparePolicyKeys(left: string, right: string): number {
+const comparePolicyKeys = (left: string, right: string): number => {
   const collated = left.localeCompare(right, "en-US");
   if (collated !== 0) return collated;
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
-}
+};
 
 function serializePolicy(value: unknown): string {
   if (value === null) return "null";
