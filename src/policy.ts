@@ -44,10 +44,11 @@ const RESOURCE_CONFIG: Record<string, { required: string[]; keys: Record<string,
 
 export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
   const unsigned = splitSignatureBlock(markdown).unsigned;
+  const structural = maskHtmlComments(unsigned);
   const version = parseVersion(unsigned);
   const isV2 = version === "2.0.0" || version === "2.1.0";
-  const sections = sectionsOf(unsigned);
-  if (V2_ONLY.test(unsigned) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
+  const sections = sectionsOf(structural);
+  if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
   if (version !== "2.1.0" && sections.some((section) => RESOURCE_SECTIONS.has(section.name))) {
     throw new Error("Policy 2.1 resource profiles require version 2.1.0");
   }
@@ -81,6 +82,14 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
 
 interface Section { name: string; body: string; }
 
+function maskHtmlComments(markdown: string): string {
+  const masked = markdown.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, " "));
+  if (masked.includes("<!--") || masked.includes("-->")) {
+    throw new Error("Unterminated HTML comment in policy");
+  }
+  return masked;
+}
+
 function sectionsOf(markdown: string): Section[] {
   const headers = [...markdown.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => ({ name: match[1]!.trim().toLowerCase(), start: match.index!, end: match.index! + match[0].length }));
   const seen = new Set<string>();
@@ -93,14 +102,11 @@ function sectionsOf(markdown: string): Section[] {
 }
 
 function parseVersion(markdown: string): string {
-  const firstSection = markdown.search(/^##\s+/m);
-  const root = firstSection < 0 ? markdown : markdown.slice(0, firstSection);
-  const withoutHtmlComments = root.replace(/<!--[\s\S]*?-->/g, "");
-  if (withoutHtmlComments.includes("<!--") || withoutHtmlComments.includes("-->")) {
-    throw new Error("Unterminated HTML comment before the first policy block");
-  }
+  const structural = maskHtmlComments(markdown);
+  const firstSection = structural.search(/^##\s+/m);
+  const root = firstSection < 0 ? structural : structural.slice(0, firstSection);
   const values: string[] = [];
-  for (const line of withoutHtmlComments.split("\n")) {
+  for (const line of root.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const match = line.match(/^\s*version:\s*(.+)$/i);
@@ -239,7 +245,7 @@ function parseToolCalls(lines: string[], isV2: boolean): Record<string, unknown>
     } else if (key === "http.allowed_hosts") {
       if (!isV2) throw new Error("http policy keys require version 2.0.0");
       const hosts = list(value).map((entry) => entry.toLowerCase());
-      if (!hosts.length || hosts.some((host) => !/^(?:\*\.)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host))) throw new Error("http.allowed_hosts must contain valid lowercase host names (use *.example.com for subdomains)");
+      if (!hosts.length || hosts.some((host) => !validPolicyHost(host))) throw new Error("http.allowed_hosts must contain valid lowercase host names (use *.example.com for subdomains)");
       result.httpAllowedHosts = [...new Set(hosts)];
     } else throw new Error(`Unrecognized tool_calls policy key: ${key}`);
   }
@@ -280,7 +286,20 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
     if (string) { const value = unquote(string[1]!); rules.push({ name: `deny_string:${value}`, type: "deny_string", value }); continue; }
     if (isV2) throw new Error(`Unrecognized custom rule: ${line}`);
   }
+  if (!rules.length && controls.requireApproval === undefined && controls.requireShim === undefined) {
+    throw new Error("## custom must declare at least one rule or generic control");
+  }
   return { rules, ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}), ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}) };
+}
+
+function validPolicyHost(value: string): boolean {
+  const hostname = value.startsWith("*.") ? value.slice(2) : value;
+  if (!hostname || hostname.length > 253) return false;
+  return hostname.split(".").every((label) =>
+    label.length > 0
+    && label.length <= 63
+    && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+  );
 }
 
 function parseMcp(lines: string[], isV2: boolean): Record<string, unknown> {

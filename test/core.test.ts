@@ -97,7 +97,7 @@ describe("warranty.md parser", () => {
       expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Invalid root version declaration");
     }
     expect(() => parsePolicyMarkdown(`version: 2.0.0\nversion: 2.0.0${permissiveLegacyBody}`)).toThrow("Duplicate version");
-    expect(parsePolicyMarkdown(`# Warranty Policy\n> This policy description is documentation.\n<!--\npolicy metadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
+    expect(parsePolicyMarkdown(`# Warranty Policy\n> This policy description is documentation.\n<!--\n## notes\npolicy metadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
     expect(parsePolicyMarkdown(permissiveLegacyBody).tool_calls?.emailRequireApproval).toBe(false);
     expect(() => parsePolicyMarkdown(`version: 2.0.0${permissiveLegacyBody}`)).toThrow("must be true or false");
   });
@@ -138,6 +138,14 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nrequire_shim: yes")).toThrow("must be true or false");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern* ")).toThrow("trailing * wildcard");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\nrequire_shim: true\nrequire_shim: false")).toThrow("Duplicate policy key");
+  });
+
+  it("rejects empty custom policies and invalid HTTP DNS labels", () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toThrow("must declare at least one rule");
+    for (const host of ["api..example.com", "api-.example.com", "-api.example.com"]) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: ${host}`)).toThrow("valid lowercase host names");
+    }
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: api.example.com, *.example.com").tool_calls?.httpAllowedHosts).toEqual(["api.example.com", "*.example.com"]);
   });
 
   it("matches Sigil Sign when execution controls have no numeric limit", () => {
