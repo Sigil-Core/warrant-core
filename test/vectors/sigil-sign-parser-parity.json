@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "53b891e0e79aba17e1191854373f4bde1ae42ab4",
+  "sigilSignCommit": "732b7a7db47bc2f0f212e9ea698fa7efb3420d65",
   "cases": [
     {
       "id": "evm-default-max-transaction",
@@ -118,6 +118,112 @@
           ]
         }
       }
+    },
+    {
+      "id": "indented-root-version",
+      "markdown": "  version: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "root-documentation-and-commented-header",
+      "markdown": "# Warranty Policy\nNote: copy this policy before use.\n> documentation\n<!--\n## notes\nmetadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "misspelled-root-version",
+      "markdown": "versoin: 2.0.0\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-root-version",
+      "markdown": "version:\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "spaced-colon-root-version",
+      "markdown": "version : 2.0.0\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "equals-root-version",
+      "markdown": "version=2.0.0\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "list-root-version",
+      "markdown": "- version: 2.0.0\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "blockquote-root-version",
+      "markdown": "> version: 2.0.0\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-root-version",
+      "markdown": "version: 2.0.0\nVersion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "invalid-semver-root-version",
+      "markdown": "version: 2.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2-email-invalid-approval-boolean",
+      "markdown": "version: 2.0.0\n\n## email\nallowed_recipients: support@example.com\nrequire_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-custom-with-enforceable-tool-policy",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: bash\n\n## custom\n# no rules",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trailing-dot-http-host-normalization",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: API.Example.Com., *.example.com",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "http"
+          ],
+          "httpAllowedHosts": [
+            "api.example.com",
+            "*.example.com"
+          ]
+        }
+      }
+    },
+    {
+      "id": "invalid-empty-http-host-label",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: api..example.com",
+      "outcome": "reject"
     },
     {
       "id": "policy-2.1-empty-required-resource-list",
