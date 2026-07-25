@@ -171,6 +171,41 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  01: ,")).toThrow("chain_actions entry for chain 1 must contain at least one action");
   });
 
+  it("accepts chain action mappings with any indentation and rejects empty entries", () => {
+    for (const indentation of [" ", "  ", "\t"]) {
+      expect(parsePolicyMarkdown(`version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n${indentation}1: wallet.transfer`).evm?.chainActions).toEqual({
+        "1": ["wallet.transfer"],
+      });
+    }
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1:")).toThrow("chain_actions entry for chain 1 must contain at least one action");
+  });
+
+  it("rejects immediate unindented chain action mappings without rejecting ordinary boundaries", () => {
+    for (const chainId of ["1", '"1"']) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n${chainId}: wallet.transfer`)).toThrow("chain_actions mappings must be indented");
+    }
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nmax_transaction_eth: 2").evm).toMatchObject({
+      chainActions: { "1": ["wallet.transfer"] },
+      maxTransactionEth: 2,
+    });
+  });
+
+  it("rejects numeric mappings before or without a chain_actions block", () => {
+    for (const chainId of ["1", '"1"']) {
+      for (const indentation of ["", "  "]) {
+        expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n${indentation}${chainId}: wallet.transfer\nchain_actions:\n  1: wallet.transfer`)).toThrow("Unknown top-level numeric mapping in ## evm");
+        expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n${indentation}${chainId}: wallet.transfer`)).toThrow("Unknown top-level numeric mapping in ## evm");
+      }
+    }
+  });
+
+  it("rejects numeric mappings after a chain_actions boundary", () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nrequire_shim: true\n  8453:")).toThrow("Dangling chain_actions mapping after the block boundary");
+    for (const chainId of ["8453", '"8453"']) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3\n${chainId}: contract.call`)).toThrow("Unknown top-level numeric mapping in ## evm");
+    }
+  });
+
   it("validates token decimals while preserving deployed numeric-prefix parsing", () => {
     const markdown = (decimals: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: ${decimals}`;
     expect(parsePolicyMarkdown(markdown("6units")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 6 } });

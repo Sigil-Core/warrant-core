@@ -25,6 +25,16 @@
       "id": "duplicate-normalized-token-scalar",
       "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200",
       "outcome": "reject"
+    },
+    {
+      "id": "unindented-unquoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unindented-quoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n\"1\": wallet.transfer",
+      "outcome": "reject"
     }
   ]
 }

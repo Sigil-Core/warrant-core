@@ -220,12 +220,21 @@ function unique(lines: string[], section: string): Array<[string, string]> {
 
 function parseEvmChainActions(body: string): Record<string, string[]> | undefined {
   const lines = body.split("\n");
+  const numericMapping = /^\s*"?\d+"?\s*:/;
   const headerIndices = lines
     .map((line, index) => (/^\s*chain_actions:\s*$/.test(line) && !/^\s*#/.test(line) ? index : -1))
     .filter((index) => index >= 0);
   if (headerIndices.length > 1) throw new Error("Duplicate EVM policy key: chain_actions");
   const headerIndex = headerIndices[0] ?? -1;
-  if (headerIndex < 0) return undefined;
+  if (headerIndex < 0) {
+    if (lines.some((line) => numericMapping.test(line))) {
+      throw new Error("Unknown top-level numeric mapping in ## evm");
+    }
+    return undefined;
+  }
+  if (lines.slice(0, headerIndex).some((line) => numericMapping.test(line))) {
+    throw new Error("Unknown top-level numeric mapping in ## evm");
+  }
   const boundaryOffset = lines.slice(headerIndex + 1).findIndex((line) =>
     line.trim() !== ""
     && !/^\s*#/.test(line)
@@ -233,8 +242,15 @@ function parseEvmChainActions(body: string): Record<string, string[]> | undefine
   );
   if (boundaryOffset >= 0) {
     const boundaryIndex = headerIndex + 1 + boundaryOffset;
-    const dangling = lines.slice(boundaryIndex + 1).some((line) => /^\s+"?\d+"?\s*:\s*.+$/.test(line));
+    const boundaryLine = lines[boundaryIndex] ?? "";
+    if (/^"?\d+"?\s*:/.test(boundaryLine)) {
+      throw new Error("chain_actions mappings must be indented");
+    }
+    const dangling = lines.slice(boundaryIndex + 1).some((line) => /^\s+"?\d+"?\s*:/.test(line));
     if (dangling) throw new Error("Dangling chain_actions mapping after the block boundary");
+    if (lines.slice(boundaryIndex).some((line) => numericMapping.test(line))) {
+      throw new Error("Unknown top-level numeric mapping in ## evm");
+    }
   }
   const result: Record<string, string[]> = {};
   const seenChainIds = new Set<string>();
@@ -245,7 +261,7 @@ function parseEvmChainActions(body: string): Record<string, string[]> | undefine
     if (/^\S/.test(line)) break;
     const normalized = line.replace(/#.*$/, "").trim();
     if (/^(?:require_approval|require_shim)\s*:/.test(normalized)) continue;
-    const match = normalized.match(/^"?(\d+)"?\s*:\s*(.+)$/);
+    const match = normalized.match(/^"?(\d+)"?\s*:\s*(.*)$/);
     if (match) {
       const chainId = match[1]!.replace(/^0+(?=\d)/, "");
       if (seenChainIds.has(chainId)) throw new Error(`Duplicate chain_actions chain ID: ${chainId}`);

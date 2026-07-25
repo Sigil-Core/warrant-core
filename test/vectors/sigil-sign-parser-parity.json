@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "21018a4b06c5fab0b514a26069d4fb92bb96f6a6",
+  "sigilSignCommit": "faa84b682ac75db7830d62bcb8015361e3cc8c64",
   "cases": [
     {
       "id": "evm-default-max-transaction",
@@ -705,6 +705,121 @@
       "id": "empty-chain-action-list",
       "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  01: ,",
       "outcome": "reject"
+    },
+    {
+      "id": "value-less-chain-action-list",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1:",
+      "outcome": "reject"
+    },
+    {
+      "id": "single-space-chain-action-indentation",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n 1: wallet.transfer",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "unindented-unquoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unindented-quoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n\"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unquoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n1: wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\"1\": wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-unquoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  1: wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-quoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  \"1\": wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unquoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-unquoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-quoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  \"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "value-less-dangling-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nrequire_shim: true\n  \"8453\":",
+      "outcome": "reject"
+    },
+    {
+      "id": "unquoted-numeric-mapping-after-chain-actions-boundary",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3\n8453: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-numeric-mapping-after-chain-actions-boundary",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3\n\"8453\": contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "ordinary-evm-boundary-after-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          },
+          "consensusThresholdEth": 3
+        }
+      }
     },
     {
       "id": "indented-policy-heading",
