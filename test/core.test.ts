@@ -95,7 +95,7 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown(`versoin: 2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
     expect(() => parsePolicyMarkdown(`versoin=2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
     expect(() => parsePolicyMarkdown(`versoin 2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
-    for (const declaration of ["version:", "version : 2.0.0", "version=2.0.0", "version", "- version: 2.0.0", "> version: 2.0.0"]) {
+    for (const declaration of ["version:", "version : 2.0.0", "version=2.0.0", "version.: 2.0.0", "version .: 2.0.0", "version--: 2.0.0", "version_: 2.0.0", "version", "- version: 2.0.0", "> version: 2.0.0"]) {
       expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Invalid root version declaration");
     }
     expect(() => parsePolicyMarkdown(`version: 2.0.0\nversion: 2.0.0${permissiveLegacyBody}`)).toThrow("Duplicate version");
@@ -124,6 +124,27 @@ describe("warranty.md parser", () => {
     const policy = parsePolicyMarkdown(genericControlVector.markdown);
     expect(policy).toEqual(genericControlVector.canonicalPolicy);
     expect(canonicalizePolicyObject(policy)).toBe(genericControlVector.canonicalPolicyJson);
+  });
+
+  it("parses generic EVM controls after chain_actions instead of treating them as chain names", () => {
+    const policy = parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1, 8453\nchain_actions:\n  \"1\": wallet.transfer\n  \"8453\": contract.call\n  require_approval: wallet.transfer\n  require_shim: true");
+    expect(policy.evm).toMatchObject({
+      chainActions: {
+        "1": ["wallet.transfer"],
+        "8453": ["contract.call"],
+      },
+      requireApproval: ["wallet.transfer"],
+      requireShim: true,
+    });
+    expect(policy.evm?.chainActions).not.toHaveProperty("require_approval");
+    expect(policy.evm?.chainActions).not.toHaveProperty("require_shim");
+
+    const boundary = parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\nrequire_approval: wallet.transfer");
+    expect(boundary.evm?.chainActions).toEqual({ "1": ["wallet.transfer"] });
+    expect(boundary.evm?.requireApproval).toEqual(["wallet.transfer"]);
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\nrequire_approval: wallet.transfer\n  \"1\": *")).toThrow("Dangling chain_actions mapping");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_approval: wallet.transfer\n  \"1\": *")).toThrow("Dangling chain_actions mapping");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_shim: true\n  \"1\": *")).toThrow("Dangling chain_actions mapping");
   });
 
   for (const parityCase of sigilSignParity.cases) {

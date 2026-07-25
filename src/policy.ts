@@ -55,7 +55,7 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
   const result: ParsedPolicy = { version };
   for (const section of sections) {
     const lines = cleanedLines(section.body);
-    if (section.name === "evm") result.evm = parseEvm(lines, isV2);
+    if (section.name === "evm") result.evm = parseEvm(lines, isV2, section.body);
     else if (section.name === "tool_calls") result.tool_calls = parseToolCalls(lines, isV2);
     else if (section.name === "custom") {
       const custom = parseCustom(lines, isV2);
@@ -149,6 +149,9 @@ function parseVersion(markdown: string): string {
     if (/^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)) {
       throw new Error(`Invalid root version declaration: ${trimmed}`);
     }
+    if (/^version\s*[^A-Za-z0-9\s:=]+\s*[:=]/i.test(unquotedMarkdown)) {
+      throw new Error(`Invalid root version declaration: ${trimmed}`);
+    }
     const rootKey = unquotedMarkdown.match(/^([A-Za-z][\w-]*)(?:\s*[:=]|\s+\d+\.\d+\.\d+(?:\s|$))/)?.[1];
     if (rootKey && isLikelyVersionKeyTypo(rootKey)) {
       throw new Error(`Unrecognized root policy field: ${trimmed}`);
@@ -212,19 +215,47 @@ function unique(lines: string[], section: string): Array<[string, string]> {
   });
 }
 
-function parseEvm(lines: string[], isV2: boolean): Record<string, unknown> {
+function parseEvmChainActions(body: string): Record<string, string[]> | undefined {
+  const lines = body.split("\n");
+  const headerIndex = lines.findIndex((line) => /^\s*chain_actions:\s*$/.test(line) && !/^\s*#/.test(line));
+  if (headerIndex < 0) return undefined;
+  const boundaryOffset = lines.slice(headerIndex + 1).findIndex((line) =>
+    line.trim() !== ""
+    && !/^\s*#/.test(line)
+    && (/^\S/.test(line) || /^\s+(?:require_approval|require_shim)\s*:/.test(line))
+  );
+  if (boundaryOffset >= 0) {
+    const boundaryIndex = headerIndex + 1 + boundaryOffset;
+    const dangling = lines.slice(boundaryIndex + 1).some((line) => /^\s+"?\d+"?\s*:\s*.+$/.test(line));
+    if (dangling) throw new Error("Dangling chain_actions mapping after the block boundary");
+  }
+  const result: Record<string, string[]> = {};
+  for (let index = headerIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (line.trim() === "" || /^\s*#/.test(line)) continue;
+    if (/^\S/.test(line)) break;
+    const normalized = line.replace(/#.*$/, "").trim();
+    if (/^(?:require_approval|require_shim)\s*:/.test(normalized)) continue;
+    const match = normalized.match(/^"?(\d+)"?\s*:\s*(.+)$/);
+    if (match) result[match[1]!] = list(match[2]!);
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, unknown> {
   const result: Record<string, unknown> = { maxTransactionEth: 5 };
   const tokens: Record<string, Record<string, unknown>> = {};
-  const chainActions: Record<string, string[]> = {};
+  const chainActions = parseEvmChainActions(body);
   const genericControls = new Set<string>();
   let chains = false;
   for (const line of lines) {
     if (line === "chain_actions:") { chains = true; continue; }
-    if (chains && /^"?[^":]+"?:\s*.+$/.test(line) && !/^(max_|allowed_|consensus_|token\.)/.test(line)) {
-      const match = line.match(/^"?([^":]+)"?:\s*(.+)$/)!;
-      chainActions[match[1]!] = list(match[2]!);
+    const generic = line.match(/^(require_approval|require_shim):\s*(.+)$/);
+    if (generic) {
+      parseGenericControl(result, generic[1]!, generic[2]!, isV2, genericControls);
       continue;
     }
+    if (chains && /^"?\d+"?\s*:\s*.+$/.test(line)) continue;
     chains = false;
     const token = line.match(/^token\.([A-Za-z0-9_]+)\.(max_transaction|consensus_threshold|decimals|addresses):\s*(.+)$/);
     if (token) {
@@ -248,7 +279,7 @@ function parseEvm(lines: string[], isV2: boolean): Record<string, unknown> {
     else if (key === "consensus_require_hold") result.requireHold = boolean(value, key, isV2);
     else throw new Error(`Unrecognized EVM policy key: ${key}`);
   }
-  if (Object.keys(chainActions).length) result.chainActions = chainActions;
+  if (chainActions !== undefined) result.chainActions = chainActions;
   if (Object.keys(tokens).length) result.tokenRules = tokens;
   if (!Array.isArray(result.allowedActions) || result.allowedActions.length === 0) {
     throw new Error("## evm requires at least one allowed_action");

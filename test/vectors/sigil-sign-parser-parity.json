@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "c7187d54d871134a21c0c255cf1044b8ce32ad54",
+  "sigilSignCommit": "21bd500850559e4197f063cfe1b94392d820f954",
   "cases": [
     {
       "id": "evm-default-max-transaction",
@@ -120,6 +120,77 @@
       }
     },
     {
+      "id": "evm-generic-controls-after-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1, 8453\nchain_actions:\n  \"1\": wallet.transfer\n  \"8453\": contract.call\n  require_approval: wallet.transfer\n  require_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer",
+            "contract.call"
+          ],
+          "allowedChains": [
+            1,
+            8453
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ],
+            "8453": [
+              "contract.call"
+            ]
+          },
+          "requireApproval": [
+            "wallet.transfer"
+          ],
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "evm-unindented-control-terminates-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\nrequire_approval: wallet.transfer",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "*"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          },
+          "requireApproval": [
+            "wallet.transfer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "evm-dangling-chain-action-after-boundary",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\nrequire_approval: wallet.transfer\n  \"1\": *",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-dangling-chain-action-after-indented-approval",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_approval: wallet.transfer\n  \"1\": *",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-dangling-chain-action-after-indented-shim",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_shim: true\n  \"1\": *",
+      "outcome": "reject"
+    },
+    {
       "id": "indented-root-version",
       "markdown": "  version: 2.0.0\n\n## tool_calls\nallowed: bash",
       "outcome": "accept",
@@ -173,6 +244,11 @@
     {
       "id": "equals-root-version",
       "markdown": "version=2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "punctuated-root-version",
+      "markdown": "version--: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
       "outcome": "reject"
     },
     {
