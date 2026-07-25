@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify on Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - '22'
+          - '24'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Pack the public artifact
+        run: npm pack --json > npm-pack.json
+      - name: Inspect the public artifact
+        run: |
+          package_tgz="$(node --input-type=module -e "const pack = JSON.parse(await (await import('node:fs/promises')).readFile('npm-pack.json', 'utf8')); process.stdout.write(pack[0].filename)")"
+          tar -tzf "$package_tgz" | tee package-files.txt
+          tar -tzf "$package_tgz" | grep -qx 'package/dist/index.js'
+          tar -tzf "$package_tgz" | grep -qx 'package/dist/index.d.ts'
+          tar -tzf "$package_tgz" | grep -qx 'package/LICENSE'
+
+  browser-vectors:
+    name: Browser vectors on Chromium
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+
+  workers-vectors:
+    name: Workers vectors on workerd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run test:workers

@@ -1,0 +1,810 @@
+{
+  "format": "sigil-warrant-policy-vectors/v1",
+  "fixtures": [
+    {
+      "slug": "defi-agent",
+      "sourceCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+      "templateBodySha256": "0edef252fbd731ccbf3cd651c3a1807f42ebd8149c502a06fcac2671a3404c53",
+      "templateBody": "version: 2.0.0\n\n## evm\nmax_transaction_eth: 2.0\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1, 8453, 42161, 10\nchain_actions:\n  \"1\": wallet.transfer, contract.call\n  \"8453\": contract.call\n  \"42161\": contract.call\n  \"10\": contract.call\n\n# Token rules bind USDC amounts to pinned token contract addresses. Token caps\n# govern intents that declare `token`; raw calldata (approve, transferFrom)\n# is not decoded at this layer and is bounded only by the ETH caps above.\ntoken.USDC.max_transaction: 10000\ntoken.USDC.decimals: 6\ntoken.USDC.addresses: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\ntoken.USDC.addresses: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\ntoken.USDC.addresses: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831\ntoken.USDC.addresses: 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85\n\n# Transactions above 1.0 ETH require human countersignature\nconsensus_threshold_eth: 1.0\nconsensus_require_hold: true\n\n## custom\n# Forces every EVM intent to carry a parseable amount so the ETH caps and the\n# consensus hold cannot be skipped by omission. allow_only fails closed on a\n# missing field.\nallow_only[action=wallet.transfer].intent.amount matches: ^\\d+(\\.\\d+)?$\nallow_only[action=contract.call].intent.amount matches: ^\\d+(\\.\\d+)?$\n\n# Every governed intent must declare an approved job type. Fails closed on a\n# missing job_type; the value is agent-declared unless intents arrive through\n# a trusted shim.\nallow_only.intent.metadata.job_type: rebalance, risk_check, treasury_reconcile\ndeny_if.intent.metadata.job_type contains test\n\n# Denies listed sanctioned address forms (Tornado Cash examples). Custom-rule\n# matching is case-sensitive, so each address is listed in checksummed and\n# all-lowercase form; pinned-token matching is not case-sensitive.\n# Canonicalization of other casings requires a trusted adapter.\ndeny_if.intent.targetAddress equals \"0x722122dF12D4e14e13Ac3b6895a86e84145b6967\"\ndeny_if.intent.targetAddress equals \"0x722122df12d4e14e13ac3b6895a86e84145b6967\"\ndeny_if.intent.targetAddress equals \"0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b\"\ndeny_if.intent.targetAddress equals \"0xd90e2f925da726b50c4ed8d0fb90ad053324f31b\"\n\n# Denies intents whose declared contract_name contains \"unverified\".\ndeny_if.intent.metadata.contract_name contains \"unverified\"\n\n# Denies listed credential strings anywhere in the intent. Case-sensitive\n# substring matching: defense in depth, not a secrets control.\ndeny_string: \"OPENAI_API_KEY\"\ndeny_string: \"PRIVATE_KEY\"\n\n## soft_limits\ndaily_evm_limit_eth: 50.0\n\n## execution_limits\nmax_tool_calls_per_task: 50\n\n## signature\nsigil-sig: REPLACE_WITH_OUTPUT_FROM_SIGNING_TOOL\n",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 2,
+          "allowedActions": [
+            "wallet.transfer",
+            "contract.call"
+          ],
+          "allowedChains": [
+            1,
+            8453,
+            42161,
+            10
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer",
+              "contract.call"
+            ],
+            "10": [
+              "contract.call"
+            ],
+            "8453": [
+              "contract.call"
+            ],
+            "42161": [
+              "contract.call"
+            ]
+          },
+          "consensusThresholdEth": 1,
+          "requireHold": true,
+          "tokenRules": {
+            "USDC": {
+              "maxTransaction": "10000",
+              "decimals": 6,
+              "addresses": [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+                "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
+              ]
+            }
+          }
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only[action=wallet.transfer].amount",
+              "type": "allow_field",
+              "fieldPath": "amount",
+              "actionScope": "wallet.transfer",
+              "operator": "matches",
+              "values": [
+                "^\\d+(\\.\\d+)?$"
+              ]
+            },
+            {
+              "name": "allow_only[action=contract.call].amount",
+              "type": "allow_field",
+              "fieldPath": "amount",
+              "actionScope": "contract.call",
+              "operator": "matches",
+              "values": [
+                "^\\d+(\\.\\d+)?$"
+              ]
+            },
+            {
+              "name": "allow_only.metadata.job_type",
+              "type": "allow_field",
+              "fieldPath": "metadata.job_type",
+              "values": [
+                "rebalance",
+                "risk_check",
+                "treasury_reconcile"
+              ]
+            },
+            {
+              "name": "deny_if.metadata.job_type.contains:test",
+              "type": "field",
+              "fieldPath": "metadata.job_type",
+              "operator": "contains",
+              "value": "test"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0x722122dF12D4e14e13Ac3b6895a86e84145b6967",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0x722122dF12D4e14e13Ac3b6895a86e84145b6967"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0x722122df12d4e14e13ac3b6895a86e84145b6967",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0x722122df12d4e14e13ac3b6895a86e84145b6967"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0xd90e2f925da726b50c4ed8d0fb90ad053324f31b",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b"
+            },
+            {
+              "name": "deny_if.metadata.contract_name.contains:unverified",
+              "type": "field",
+              "fieldPath": "metadata.contract_name",
+              "operator": "contains",
+              "value": "unverified"
+            },
+            {
+              "name": "deny_string:OPENAI_API_KEY",
+              "type": "deny_string",
+              "value": "OPENAI_API_KEY"
+            },
+            {
+              "name": "deny_string:PRIVATE_KEY",
+              "type": "deny_string",
+              "value": "PRIVATE_KEY"
+            }
+          ]
+        },
+        "soft_limits": {
+          "dailyEvmLimitEth": 50
+        },
+        "execution_limits": {
+          "maxToolCallsPerTask": 50
+        }
+      },
+      "canonicalPolicyJson": "{\"custom\":{\"rules\":[{\"actionScope\":\"wallet.transfer\",\"fieldPath\":\"amount\",\"name\":\"allow_only[action=wallet.transfer].amount\",\"operator\":\"matches\",\"type\":\"allow_field\",\"values\":[\"^\\\\d+(\\\\.\\\\d+)?$\"]},{\"actionScope\":\"contract.call\",\"fieldPath\":\"amount\",\"name\":\"allow_only[action=contract.call].amount\",\"operator\":\"matches\",\"type\":\"allow_field\",\"values\":[\"^\\\\d+(\\\\.\\\\d+)?$\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"allow_only.metadata.job_type\",\"type\":\"allow_field\",\"values\":[\"rebalance\",\"risk_check\",\"treasury_reconcile\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"deny_if.metadata.job_type.contains:test\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"test\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0x722122dF12D4e14e13Ac3b6895a86e84145b6967\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0x722122dF12D4e14e13Ac3b6895a86e84145b6967\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0x722122df12d4e14e13ac3b6895a86e84145b6967\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0x722122df12d4e14e13ac3b6895a86e84145b6967\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0xd90e2f925da726b50c4ed8d0fb90ad053324f31b\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0xd90e2f925da726b50c4ed8d0fb90ad053324f31b\"},{\"fieldPath\":\"metadata.contract_name\",\"name\":\"deny_if.metadata.contract_name.contains:unverified\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"unverified\"},{\"name\":\"deny_string:OPENAI_API_KEY\",\"type\":\"deny_string\",\"value\":\"OPENAI_API_KEY\"},{\"name\":\"deny_string:PRIVATE_KEY\",\"type\":\"deny_string\",\"value\":\"PRIVATE_KEY\"}]},\"evm\":{\"allowedActions\":[\"wallet.transfer\",\"contract.call\"],\"allowedChains\":[1,8453,42161,10],\"chainActions\":{\"1\":[\"wallet.transfer\",\"contract.call\"],\"10\":[\"contract.call\"],\"42161\":[\"contract.call\"],\"8453\":[\"contract.call\"]},\"consensusThresholdEth\":1,\"maxTransactionEth\":2,\"requireHold\":true,\"tokenRules\":{\"USDC\":{\"addresses\":[\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913\",\"0xaf88d065e77c8cc2239327c5edb3a432268e5831\",\"0x0b2c639c533813f4aa9d7837caf62653d097ff85\"],\"decimals\":6,\"maxTransaction\":\"10000\"}}},\"execution_limits\":{\"maxToolCallsPerTask\":50},\"soft_limits\":{\"dailyEvmLimitEth\":50},\"version\":\"2.0.0\"}",
+      "policyHashSha256": "9af3477685c1ec2d51713e741a87e81654f102df12ba74eed4175bcd51cca3e2"
+    },
+    {
+      "slug": "claude-code-agent",
+      "sourceCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+      "templateBodySha256": "d6f8747043f2cab42a7baea3d874449bd9e12752f0b1d36f5ed5d7e5c1490c88",
+      "templateBody": "version: 2.1.0\n\n## repository\nroots: .\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: generic, github\nrequire_shim: true\n\n## tool_calls\nallowed: bash, web_fetch, file_write, email.send\nbash.blocked_commands: rm -rf, rm -r /, mkfs, dd if=, shutdown, reboot\nweb_fetch.blocked_domains: evil.com, malware.io\nfile_write.blocked_paths: /etc, /root, /var, /usr, /sys, /proc, /boot, ~/.ssh, ~/.gnupg, ~/.aws\nemail.require_approval: true\nemail.allowed_recipients: *@sigilcore.com, maintainer@example.com\nemail.blocked_recipients: noreply@sigilcore.com\n\n## custom\n# Require every governed intent to declare the kind of coding work requested.\nallow_only.intent.metadata.job_type: code_review, test_run, documentation\ndeny_if.intent.metadata.job_type contains test_payload\n\n# Block git push to main/master without human approval\ndeny_if.intent.command contains \"git push origin main\"\ndeny_if.intent.command contains \"git push origin master\"\ndeny_if.intent.command contains \"git push --force\"\n\n# Block destructive git operations\ndeny_if.intent.command contains \"git reset --hard\"\ndeny_if.intent.command contains \"git clean -fd\"\n\n# Block credential exfiltration\ndeny_string: AWS_SECRET_ACCESS_KEY\ndeny_string: ANTHROPIC_API_KEY\ndeny_string: OPENAI_API_KEY\ndeny_string: GITHUB_TOKEN\ndeny_string: BEGIN RSA PRIVATE KEY\ndeny_string: BEGIN OPENSSH PRIVATE KEY\n\n# Block writes outside the project directory\ndeny_if.intent.path starts_with \"/etc\"\ndeny_if.intent.path starts_with \"/root\"\ndeny_if.intent.path starts_with \"/var\"\ndeny_if.intent.path contains \".ssh\"\ndeny_if.intent.path contains \".env\"\n\n## soft_limits\n# Enforced across all governed tool calls: exceeding this limit returns DENIED;\n# the day bucket resets at 00:00 UTC.\ndaily_tool_calls: 1000\n\n## execution_limits\nmax_tool_calls_per_task: 50\n\n## signature\nsigil-sig: REPLACE_WITH_OUTPUT_FROM_SIGNING_TOOL\n",
+      "canonicalPolicy": {
+        "version": "2.1.0",
+        "tool_calls": {
+          "allowed": [
+            "bash",
+            "web_fetch",
+            "file_write",
+            "email.send"
+          ],
+          "bashBlockedCommands": [
+            "rm -rf",
+            "rm -r /",
+            "mkfs",
+            "dd if=",
+            "shutdown",
+            "reboot"
+          ],
+          "webFetchBlockedDomains": [
+            "evil.com",
+            "malware.io"
+          ],
+          "fileWriteBlockedPaths": [
+            "/etc",
+            "/root",
+            "/var",
+            "/usr",
+            "/sys",
+            "/proc",
+            "/boot",
+            "~/.ssh",
+            "~/.gnupg",
+            "~/.aws"
+          ],
+          "emailRequireApproval": true,
+          "emailAllowedRecipients": [
+            "*@sigilcore.com",
+            "maintainer@example.com"
+          ],
+          "emailBlockedRecipients": [
+            "noreply@sigilcore.com"
+          ]
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only.metadata.job_type",
+              "type": "allow_field",
+              "fieldPath": "metadata.job_type",
+              "values": [
+                "code_review",
+                "test_run",
+                "documentation"
+              ]
+            },
+            {
+              "name": "deny_if.metadata.job_type.contains:test_payload",
+              "type": "field",
+              "fieldPath": "metadata.job_type",
+              "operator": "contains",
+              "value": "test_payload"
+            },
+            {
+              "name": "deny_if.command.contains:git push origin main",
+              "type": "field",
+              "fieldPath": "command",
+              "operator": "contains",
+              "value": "git push origin main"
+            },
+            {
+              "name": "deny_if.command.contains:git push origin master",
+              "type": "field",
+              "fieldPath": "command",
+              "operator": "contains",
+              "value": "git push origin master"
+            },
+            {
+              "name": "deny_if.command.contains:git push --force",
+              "type": "field",
+              "fieldPath": "command",
+              "operator": "contains",
+              "value": "git push --force"
+            },
+            {
+              "name": "deny_if.command.contains:git reset --hard",
+              "type": "field",
+              "fieldPath": "command",
+              "operator": "contains",
+              "value": "git reset --hard"
+            },
+            {
+              "name": "deny_if.command.contains:git clean -fd",
+              "type": "field",
+              "fieldPath": "command",
+              "operator": "contains",
+              "value": "git clean -fd"
+            },
+            {
+              "name": "deny_string:AWS_SECRET_ACCESS_KEY",
+              "type": "deny_string",
+              "value": "AWS_SECRET_ACCESS_KEY"
+            },
+            {
+              "name": "deny_string:ANTHROPIC_API_KEY",
+              "type": "deny_string",
+              "value": "ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "deny_string:OPENAI_API_KEY",
+              "type": "deny_string",
+              "value": "OPENAI_API_KEY"
+            },
+            {
+              "name": "deny_string:GITHUB_TOKEN",
+              "type": "deny_string",
+              "value": "GITHUB_TOKEN"
+            },
+            {
+              "name": "deny_string:BEGIN RSA PRIVATE KEY",
+              "type": "deny_string",
+              "value": "BEGIN RSA PRIVATE KEY"
+            },
+            {
+              "name": "deny_string:BEGIN OPENSSH PRIVATE KEY",
+              "type": "deny_string",
+              "value": "BEGIN OPENSSH PRIVATE KEY"
+            },
+            {
+              "name": "deny_if.path.starts_with:/etc",
+              "type": "field",
+              "fieldPath": "path",
+              "operator": "starts_with",
+              "value": "/etc"
+            },
+            {
+              "name": "deny_if.path.starts_with:/root",
+              "type": "field",
+              "fieldPath": "path",
+              "operator": "starts_with",
+              "value": "/root"
+            },
+            {
+              "name": "deny_if.path.starts_with:/var",
+              "type": "field",
+              "fieldPath": "path",
+              "operator": "starts_with",
+              "value": "/var"
+            },
+            {
+              "name": "deny_if.path.contains:.ssh",
+              "type": "field",
+              "fieldPath": "path",
+              "operator": "contains",
+              "value": ".ssh"
+            },
+            {
+              "name": "deny_if.path.contains:.env",
+              "type": "field",
+              "fieldPath": "path",
+              "operator": "contains",
+              "value": ".env"
+            }
+          ]
+        },
+        "soft_limits": {
+          "dailyToolCalls": 1000
+        },
+        "execution_limits": {
+          "maxToolCallsPerTask": 50
+        },
+        "repository": {
+          "roots": [
+            "."
+          ],
+          "blockOutsideWrites": true,
+          "protectGitHistory": true,
+          "protectSensitiveFiles": true,
+          "gitProviders": [
+            "generic",
+            "github"
+          ],
+          "requireShim": true
+        }
+      },
+      "canonicalPolicyJson": "{\"custom\":{\"rules\":[{\"fieldPath\":\"metadata.job_type\",\"name\":\"allow_only.metadata.job_type\",\"type\":\"allow_field\",\"values\":[\"code_review\",\"test_run\",\"documentation\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"deny_if.metadata.job_type.contains:test_payload\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"test_payload\"},{\"fieldPath\":\"command\",\"name\":\"deny_if.command.contains:git push origin main\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"git push origin main\"},{\"fieldPath\":\"command\",\"name\":\"deny_if.command.contains:git push origin master\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"git push origin master\"},{\"fieldPath\":\"command\",\"name\":\"deny_if.command.contains:git push --force\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"git push --force\"},{\"fieldPath\":\"command\",\"name\":\"deny_if.command.contains:git reset --hard\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"git reset --hard\"},{\"fieldPath\":\"command\",\"name\":\"deny_if.command.contains:git clean -fd\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"git clean -fd\"},{\"name\":\"deny_string:AWS_SECRET_ACCESS_KEY\",\"type\":\"deny_string\",\"value\":\"AWS_SECRET_ACCESS_KEY\"},{\"name\":\"deny_string:ANTHROPIC_API_KEY\",\"type\":\"deny_string\",\"value\":\"ANTHROPIC_API_KEY\"},{\"name\":\"deny_string:OPENAI_API_KEY\",\"type\":\"deny_string\",\"value\":\"OPENAI_API_KEY\"},{\"name\":\"deny_string:GITHUB_TOKEN\",\"type\":\"deny_string\",\"value\":\"GITHUB_TOKEN\"},{\"name\":\"deny_string:BEGIN RSA PRIVATE KEY\",\"type\":\"deny_string\",\"value\":\"BEGIN RSA PRIVATE KEY\"},{\"name\":\"deny_string:BEGIN OPENSSH PRIVATE KEY\",\"type\":\"deny_string\",\"value\":\"BEGIN OPENSSH PRIVATE KEY\"},{\"fieldPath\":\"path\",\"name\":\"deny_if.path.starts_with:/etc\",\"operator\":\"starts_with\",\"type\":\"field\",\"value\":\"/etc\"},{\"fieldPath\":\"path\",\"name\":\"deny_if.path.starts_with:/root\",\"operator\":\"starts_with\",\"type\":\"field\",\"value\":\"/root\"},{\"fieldPath\":\"path\",\"name\":\"deny_if.path.starts_with:/var\",\"operator\":\"starts_with\",\"type\":\"field\",\"value\":\"/var\"},{\"fieldPath\":\"path\",\"name\":\"deny_if.path.contains:.ssh\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\".ssh\"},{\"fieldPath\":\"path\",\"name\":\"deny_if.path.contains:.env\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\".env\"}]},\"execution_limits\":{\"maxToolCallsPerTask\":50},\"repository\":{\"blockOutsideWrites\":true,\"gitProviders\":[\"generic\",\"github\"],\"protectGitHistory\":true,\"protectSensitiveFiles\":true,\"requireShim\":true,\"roots\":[\".\"]},\"soft_limits\":{\"dailyToolCalls\":1000},\"tool_calls\":{\"allowed\":[\"bash\",\"web_fetch\",\"file_write\",\"email.send\"],\"bashBlockedCommands\":[\"rm -rf\",\"rm -r /\",\"mkfs\",\"dd if=\",\"shutdown\",\"reboot\"],\"emailAllowedRecipients\":[\"*@sigilcore.com\",\"maintainer@example.com\"],\"emailBlockedRecipients\":[\"noreply@sigilcore.com\"],\"emailRequireApproval\":true,\"fileWriteBlockedPaths\":[\"/etc\",\"/root\",\"/var\",\"/usr\",\"/sys\",\"/proc\",\"/boot\",\"~/.ssh\",\"~/.gnupg\",\"~/.aws\"],\"webFetchBlockedDomains\":[\"evil.com\",\"malware.io\"]},\"version\":\"2.1.0\"}",
+      "policyHashSha256": "836fc9652526ad51847379ad502a6e25e7309fd90520d6e940a3a37ff673ba4e"
+    },
+    {
+      "slug": "outbound-email-agent",
+      "sourceCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+      "templateBodySha256": "dd4b0963a56a0082976ad42b825fa3769ea98cee46a2b946554c1dc1a6610292",
+      "templateBody": "version: 2.0.0\n\n## tool_calls\nallowed: http, email.send\n# CRM and enrichment reads only: GET to the allowlisted host, nothing else.\nhttp.allowed_methods: GET\nhttp.allowed_hosts: api.crm.example.com\n\n# Every send is held for human approval. Remove this line only after the\n# recipient, campaign, and volume controls below have run clean in production.\nemail.require_approval: true\n\n# Declaring recipient rules makes a missing `to` fail closed: a send intent\n# with no recipient is denied, not approved.\nemail.blocked_recipients: all-staff@yourcompany.example.com, everyone@yourcompany.example.com, *@internal.yourcompany.example.com\n\n## custom\n# The agent must declare an approved outreach job type. Declared, not\n# independently verified, unless intents arrive via a trusted shim.\nallow_only.intent.metadata.job_type: prospect_outreach, follow_up, reply_draft\ndeny_if.intent.metadata.job_type contains test\n\n# One prospect per send. Broadcasts belong in your ESP with its own controls.\ndeny_if.intent.metadata.broadcast equals \"true\"\n\n# Deny listed credential strings anywhere in the intent. Case-sensitive\n# substring matching: defense in depth, not a secrets control.\ndeny_string: \"OPENAI_API_KEY\"\ndeny_string: \"ANTHROPIC_API_KEY\"\ndeny_string: \"RESEND_API_KEY\"\ndeny_string: \"SENDGRID_API_KEY\"\ndeny_string: \"BEGIN RSA PRIVATE KEY\"\ndeny_string: \"api_key=\"\n\n## soft_limits\ndaily_tool_calls: 300\n\n# Per-campaign daily send cap. group_by fails closed: a send intent without\n# metadata.campaign is denied, which forces campaign labeling on every send.\ncap.outbound_sends.max_count: 150\ncap.outbound_sends.window: day\ncap.outbound_sends.action: email.send\ncap.outbound_sends.group_by: metadata.campaign\n\n## execution_limits\nmax_tool_calls_per_task: 15\nmax_tool_calls_per_hour: 100\n\n## signature\nsigil-sig: REPLACE_WITH_OUTPUT_FROM_SIGNING_TOOL\n",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "http",
+            "email.send"
+          ],
+          "emailRequireApproval": true,
+          "emailBlockedRecipients": [
+            "all-staff@yourcompany.example.com",
+            "everyone@yourcompany.example.com",
+            "*@internal.yourcompany.example.com"
+          ],
+          "httpAllowedMethods": [
+            "GET"
+          ],
+          "httpAllowedHosts": [
+            "api.crm.example.com"
+          ]
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only.metadata.job_type",
+              "type": "allow_field",
+              "fieldPath": "metadata.job_type",
+              "values": [
+                "prospect_outreach",
+                "follow_up",
+                "reply_draft"
+              ]
+            },
+            {
+              "name": "deny_if.metadata.job_type.contains:test",
+              "type": "field",
+              "fieldPath": "metadata.job_type",
+              "operator": "contains",
+              "value": "test"
+            },
+            {
+              "name": "deny_if.metadata.broadcast.equals:true",
+              "type": "field",
+              "fieldPath": "metadata.broadcast",
+              "operator": "equals",
+              "value": "true"
+            },
+            {
+              "name": "deny_string:OPENAI_API_KEY",
+              "type": "deny_string",
+              "value": "OPENAI_API_KEY"
+            },
+            {
+              "name": "deny_string:ANTHROPIC_API_KEY",
+              "type": "deny_string",
+              "value": "ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "deny_string:RESEND_API_KEY",
+              "type": "deny_string",
+              "value": "RESEND_API_KEY"
+            },
+            {
+              "name": "deny_string:SENDGRID_API_KEY",
+              "type": "deny_string",
+              "value": "SENDGRID_API_KEY"
+            },
+            {
+              "name": "deny_string:BEGIN RSA PRIVATE KEY",
+              "type": "deny_string",
+              "value": "BEGIN RSA PRIVATE KEY"
+            },
+            {
+              "name": "deny_string:api_key=",
+              "type": "deny_string",
+              "value": "api_key="
+            }
+          ]
+        },
+        "soft_limits": {
+          "dailyToolCalls": 300,
+          "caps": {
+            "outbound_sends": {
+              "maxCount": 150,
+              "window": "day",
+              "action": "email.send",
+              "groupBy": "metadata.campaign"
+            }
+          }
+        },
+        "execution_limits": {
+          "maxToolCallsPerTask": 15,
+          "maxToolCallsPerHour": 100
+        }
+      },
+      "canonicalPolicyJson": "{\"custom\":{\"rules\":[{\"fieldPath\":\"metadata.job_type\",\"name\":\"allow_only.metadata.job_type\",\"type\":\"allow_field\",\"values\":[\"prospect_outreach\",\"follow_up\",\"reply_draft\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"deny_if.metadata.job_type.contains:test\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"test\"},{\"fieldPath\":\"metadata.broadcast\",\"name\":\"deny_if.metadata.broadcast.equals:true\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"true\"},{\"name\":\"deny_string:OPENAI_API_KEY\",\"type\":\"deny_string\",\"value\":\"OPENAI_API_KEY\"},{\"name\":\"deny_string:ANTHROPIC_API_KEY\",\"type\":\"deny_string\",\"value\":\"ANTHROPIC_API_KEY\"},{\"name\":\"deny_string:RESEND_API_KEY\",\"type\":\"deny_string\",\"value\":\"RESEND_API_KEY\"},{\"name\":\"deny_string:SENDGRID_API_KEY\",\"type\":\"deny_string\",\"value\":\"SENDGRID_API_KEY\"},{\"name\":\"deny_string:BEGIN RSA PRIVATE KEY\",\"type\":\"deny_string\",\"value\":\"BEGIN RSA PRIVATE KEY\"},{\"name\":\"deny_string:api_key=\",\"type\":\"deny_string\",\"value\":\"api_key=\"}]},\"execution_limits\":{\"maxToolCallsPerHour\":100,\"maxToolCallsPerTask\":15},\"soft_limits\":{\"caps\":{\"outbound_sends\":{\"action\":\"email.send\",\"groupBy\":\"metadata.campaign\",\"maxCount\":150,\"window\":\"day\"}},\"dailyToolCalls\":300},\"tool_calls\":{\"allowed\":[\"http\",\"email.send\"],\"emailBlockedRecipients\":[\"all-staff@yourcompany.example.com\",\"everyone@yourcompany.example.com\",\"*@internal.yourcompany.example.com\"],\"emailRequireApproval\":true,\"httpAllowedHosts\":[\"api.crm.example.com\"],\"httpAllowedMethods\":[\"GET\"]},\"version\":\"2.0.0\"}",
+      "policyHashSha256": "683d4425a926e19fd3c8367b4ca334c4322f37965b231357d0e46e8bcbd7fe18"
+    },
+    {
+      "slug": "stablecoin-treasury-agent",
+      "sourceCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+      "templateBodySha256": "537d6050637daa7129fa6ec389acf866bf8f8efa57f40084abf927f525e8007a",
+      "templateBody": "version: 2.0.0\n\n## evm\nmax_transaction_eth: 1.0\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1, 8453, 42161, 10\n\n# Per-issuer caps bind to pinned token contract addresses. Token caps govern\n# intents that declare `token`; raw calldata (approve, transferFrom) is not\n# decoded at this layer and is bounded only by the ETH caps above.\ntoken.USDC.max_transaction: 250000\ntoken.USDC.decimals: 6\ntoken.USDC.addresses: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\ntoken.USDC.addresses: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\ntoken.USDC.addresses: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831\ntoken.USDC.addresses: 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85\n\n# PYUSD: PayPal USD (Paxos), Ethereum mainnet, verified via paxos.com/pyusd.\ntoken.PYUSD.max_transaction: 100000\ntoken.PYUSD.decimals: 6\ntoken.PYUSD.addresses: 0x6c3ea9036406852006290770BEdFcAbA0e23A0e8\n# USDT: Tether USD, Ethereum mainnet, verified via\n# tether.to/en/supported-protocols.\ntoken.USDT.max_transaction: 100000\ntoken.USDT.decimals: 6\ntoken.USDT.addresses: 0xdAC17F958D2ee523a2206206994597C13D831ec7\n\n# Movements above 0.5 ETH-equivalent require human countersignature.\nconsensus_threshold_eth: 0.5\nconsensus_require_hold: true\n\n## custom\n# Forces every EVM intent to carry a parseable amount so the ETH caps and the\n# consensus hold cannot be skipped by omission. allow_only fails closed on a\n# missing field.\nallow_only[action=wallet.transfer].intent.amount matches: ^\\d+(\\.\\d+)?$\nallow_only[action=contract.call].intent.amount matches: ^\\d+(\\.\\d+)?$\n\n# Every governed intent must declare an approved treasury job type. Fails\n# closed on a missing job_type; the value is agent-declared unless intents\n# arrive through a trusted shim.\nallow_only.intent.metadata.job_type: rebalance, reserve_check, treasury_reconcile\ndeny_if.intent.metadata.job_type contains test\n\n# Denies listed sanctioned address forms (Tornado Cash examples). Custom-rule\n# matching is case-sensitive, so each address is listed in checksummed and\n# all-lowercase form; pinned-token matching is not case-sensitive.\n# Canonicalization of other casings requires a trusted adapter.\ndeny_if.intent.targetAddress equals \"0x722122dF12D4e14e13Ac3b6895a86e84145b6967\"\ndeny_if.intent.targetAddress equals \"0x722122df12d4e14e13ac3b6895a86e84145b6967\"\ndeny_if.intent.targetAddress equals \"0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b\"\ndeny_if.intent.targetAddress equals \"0xd90e2f925da726b50c4ed8d0fb90ad053324f31b\"\n\n# Denies intents whose declared contract_name contains \"unverified\".\ndeny_if.intent.metadata.contract_name contains \"unverified\"\n\n# Denies listed credential strings anywhere in the intent. Case-sensitive\n# substring matching: defense in depth, not a secrets control.\ndeny_string: \"PRIVATE_KEY\"\ndeny_string: \"OPENAI_API_KEY\"\n\n## soft_limits\ndaily_evm_limit_eth: 25.0\n\n## execution_limits\nmax_tool_calls_per_task: 50\nmax_tool_calls_per_hour: 200\n\n## signature\nsigil-sig: REPLACE_WITH_OUTPUT_FROM_SIGNING_TOOL\n",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 1,
+          "allowedActions": [
+            "wallet.transfer",
+            "contract.call"
+          ],
+          "allowedChains": [
+            1,
+            8453,
+            42161,
+            10
+          ],
+          "consensusThresholdEth": 0.5,
+          "requireHold": true,
+          "tokenRules": {
+            "USDC": {
+              "maxTransaction": "250000",
+              "decimals": 6,
+              "addresses": [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+                "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
+              ]
+            },
+            "PYUSD": {
+              "maxTransaction": "100000",
+              "decimals": 6,
+              "addresses": [
+                "0x6c3ea9036406852006290770bedfcaba0e23a0e8"
+              ]
+            },
+            "USDT": {
+              "maxTransaction": "100000",
+              "decimals": 6,
+              "addresses": [
+                "0xdac17f958d2ee523a2206206994597c13d831ec7"
+              ]
+            }
+          }
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only[action=wallet.transfer].amount",
+              "type": "allow_field",
+              "fieldPath": "amount",
+              "actionScope": "wallet.transfer",
+              "operator": "matches",
+              "values": [
+                "^\\d+(\\.\\d+)?$"
+              ]
+            },
+            {
+              "name": "allow_only[action=contract.call].amount",
+              "type": "allow_field",
+              "fieldPath": "amount",
+              "actionScope": "contract.call",
+              "operator": "matches",
+              "values": [
+                "^\\d+(\\.\\d+)?$"
+              ]
+            },
+            {
+              "name": "allow_only.metadata.job_type",
+              "type": "allow_field",
+              "fieldPath": "metadata.job_type",
+              "values": [
+                "rebalance",
+                "reserve_check",
+                "treasury_reconcile"
+              ]
+            },
+            {
+              "name": "deny_if.metadata.job_type.contains:test",
+              "type": "field",
+              "fieldPath": "metadata.job_type",
+              "operator": "contains",
+              "value": "test"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0x722122dF12D4e14e13Ac3b6895a86e84145b6967",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0x722122dF12D4e14e13Ac3b6895a86e84145b6967"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0x722122df12d4e14e13ac3b6895a86e84145b6967",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0x722122df12d4e14e13ac3b6895a86e84145b6967"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b"
+            },
+            {
+              "name": "deny_if.targetAddress.equals:0xd90e2f925da726b50c4ed8d0fb90ad053324f31b",
+              "type": "field",
+              "fieldPath": "targetAddress",
+              "operator": "equals",
+              "value": "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b"
+            },
+            {
+              "name": "deny_if.metadata.contract_name.contains:unverified",
+              "type": "field",
+              "fieldPath": "metadata.contract_name",
+              "operator": "contains",
+              "value": "unverified"
+            },
+            {
+              "name": "deny_string:PRIVATE_KEY",
+              "type": "deny_string",
+              "value": "PRIVATE_KEY"
+            },
+            {
+              "name": "deny_string:OPENAI_API_KEY",
+              "type": "deny_string",
+              "value": "OPENAI_API_KEY"
+            }
+          ]
+        },
+        "soft_limits": {
+          "dailyEvmLimitEth": 25
+        },
+        "execution_limits": {
+          "maxToolCallsPerTask": 50,
+          "maxToolCallsPerHour": 200
+        }
+      },
+      "canonicalPolicyJson": "{\"custom\":{\"rules\":[{\"actionScope\":\"wallet.transfer\",\"fieldPath\":\"amount\",\"name\":\"allow_only[action=wallet.transfer].amount\",\"operator\":\"matches\",\"type\":\"allow_field\",\"values\":[\"^\\\\d+(\\\\.\\\\d+)?$\"]},{\"actionScope\":\"contract.call\",\"fieldPath\":\"amount\",\"name\":\"allow_only[action=contract.call].amount\",\"operator\":\"matches\",\"type\":\"allow_field\",\"values\":[\"^\\\\d+(\\\\.\\\\d+)?$\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"allow_only.metadata.job_type\",\"type\":\"allow_field\",\"values\":[\"rebalance\",\"reserve_check\",\"treasury_reconcile\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"deny_if.metadata.job_type.contains:test\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"test\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0x722122dF12D4e14e13Ac3b6895a86e84145b6967\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0x722122dF12D4e14e13Ac3b6895a86e84145b6967\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0x722122df12d4e14e13ac3b6895a86e84145b6967\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0x722122df12d4e14e13ac3b6895a86e84145b6967\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b\"},{\"fieldPath\":\"targetAddress\",\"name\":\"deny_if.targetAddress.equals:0xd90e2f925da726b50c4ed8d0fb90ad053324f31b\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"0xd90e2f925da726b50c4ed8d0fb90ad053324f31b\"},{\"fieldPath\":\"metadata.contract_name\",\"name\":\"deny_if.metadata.contract_name.contains:unverified\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"unverified\"},{\"name\":\"deny_string:PRIVATE_KEY\",\"type\":\"deny_string\",\"value\":\"PRIVATE_KEY\"},{\"name\":\"deny_string:OPENAI_API_KEY\",\"type\":\"deny_string\",\"value\":\"OPENAI_API_KEY\"}]},\"evm\":{\"allowedActions\":[\"wallet.transfer\",\"contract.call\"],\"allowedChains\":[1,8453,42161,10],\"consensusThresholdEth\":0.5,\"maxTransactionEth\":1,\"requireHold\":true,\"tokenRules\":{\"PYUSD\":{\"addresses\":[\"0x6c3ea9036406852006290770bedfcaba0e23a0e8\"],\"decimals\":6,\"maxTransaction\":\"100000\"},\"USDC\":{\"addresses\":[\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913\",\"0xaf88d065e77c8cc2239327c5edb3a432268e5831\",\"0x0b2c639c533813f4aa9d7837caf62653d097ff85\"],\"decimals\":6,\"maxTransaction\":\"250000\"},\"USDT\":{\"addresses\":[\"0xdac17f958d2ee523a2206206994597c13d831ec7\"],\"decimals\":6,\"maxTransaction\":\"100000\"}}},\"execution_limits\":{\"maxToolCallsPerHour\":200,\"maxToolCallsPerTask\":50},\"soft_limits\":{\"dailyEvmLimitEth\":25},\"version\":\"2.0.0\"}",
+      "policyHashSha256": "407babc6805850b6891d2c4d1d444d28c937cba566e86e722560c08eb4ce46c9"
+    },
+    {
+      "slug": "customer-support-agent",
+      "sourceCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+      "templateBodySha256": "07a45c93c7f23ee71fd9b000f29cd667d95309c864734b2f3d59afe8b2ef9614",
+      "templateBody": "version: 2.1.0\n\n## tool_calls\nallowed: web_fetch, email.send\nweb_fetch.blocked_domains: localhost, 127.0.0.1, 0.0.0.0, 169.254.169.254, metadata.google.internal\n# The primary control: every outbound reply is held for human approval, and\n# recipient rules fail closed — a send with no `to` is denied, and recipients\n# outside the allowlist below are denied.\nemail.require_approval: true\nemail.allowed_recipients: *@customers.example.com, support@sigilcore.com\nemail.blocked_recipients: all-staff@sigilcore.com, everyone@sigilcore.com, internal@sigilcore.com\n\n## custom\n# Every governed intent must declare an approved support job type. Fails closed\n# on a missing job_type; the value is agent-declared unless intents arrive\n# through a trusted shim.\nallow_only.intent.metadata.job_type: ticket_reply, status_update, refund_request\ndeny_if.intent.metadata.job_type contains test\n\n# Refund requests are an allowed job type above; execution is denied here, so a\n# refund reaches a human only through the email approval hold, never\n# auto-executed from a ticket reply.\ndeny_if.intent.command contains \"issue_refund\"\ndeny_if.intent.metadata.action equals \"refund\"\n\n# Denies listed PII marker strings anywhere in the intent. Case-sensitive\n# substring matching, so both casings are listed: defense in depth, not a PII\n# control.\ndeny_string: \"Social Security Number\"\ndeny_string: \"social security number\"\ndeny_string: \"SSN:\"\ndeny_string: \"ssn:\"\ndeny_string: \"card number\"\ndeny_string: \"SELECT * FROM customers\"\ndeny_string: \"select * from customers\"\ndeny_string: \"SELECT * FROM accounts\"\ndeny_string: \"select * from accounts\"\n\n# Denies sends the agent labels as broadcasts (one ticket, one recipient).\ndeny_if.intent.metadata.broadcast equals \"true\"\n\n## soft_limits\n# Enforced across all governed tool calls: exceeding this limit returns DENIED;\n# the day bucket resets at 00:00 UTC.\ndaily_tool_calls: 300\n\n## execution_limits\nmax_tool_calls_per_task: 20\nmax_tool_calls_per_hour: 400\n\n## signature\nsigil-sig: REPLACE_WITH_OUTPUT_FROM_SIGNING_TOOL\n",
+      "canonicalPolicy": {
+        "version": "2.1.0",
+        "tool_calls": {
+          "allowed": [
+            "web_fetch",
+            "email.send"
+          ],
+          "webFetchBlockedDomains": [
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "169.254.169.254",
+            "metadata.google.internal"
+          ],
+          "emailRequireApproval": true,
+          "emailAllowedRecipients": [
+            "*@customers.example.com",
+            "support@sigilcore.com"
+          ],
+          "emailBlockedRecipients": [
+            "all-staff@sigilcore.com",
+            "everyone@sigilcore.com",
+            "internal@sigilcore.com"
+          ]
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only.metadata.job_type",
+              "type": "allow_field",
+              "fieldPath": "metadata.job_type",
+              "values": [
+                "ticket_reply",
+                "status_update",
+                "refund_request"
+              ]
+            },
+            {
+              "name": "deny_if.metadata.job_type.contains:test",
+              "type": "field",
+              "fieldPath": "metadata.job_type",
+              "operator": "contains",
+              "value": "test"
+            },
+            {
+              "name": "deny_if.command.contains:issue_refund",
+              "type": "field",
+              "fieldPath": "command",
+              "operator": "contains",
+              "value": "issue_refund"
+            },
+            {
+              "name": "deny_if.metadata.action.equals:refund",
+              "type": "field",
+              "fieldPath": "metadata.action",
+              "operator": "equals",
+              "value": "refund"
+            },
+            {
+              "name": "deny_string:Social Security Number",
+              "type": "deny_string",
+              "value": "Social Security Number"
+            },
+            {
+              "name": "deny_string:social security number",
+              "type": "deny_string",
+              "value": "social security number"
+            },
+            {
+              "name": "deny_string:SSN:",
+              "type": "deny_string",
+              "value": "SSN:"
+            },
+            {
+              "name": "deny_string:ssn:",
+              "type": "deny_string",
+              "value": "ssn:"
+            },
+            {
+              "name": "deny_string:card number",
+              "type": "deny_string",
+              "value": "card number"
+            },
+            {
+              "name": "deny_string:SELECT * FROM customers",
+              "type": "deny_string",
+              "value": "SELECT * FROM customers"
+            },
+            {
+              "name": "deny_string:select * from customers",
+              "type": "deny_string",
+              "value": "select * from customers"
+            },
+            {
+              "name": "deny_string:SELECT * FROM accounts",
+              "type": "deny_string",
+              "value": "SELECT * FROM accounts"
+            },
+            {
+              "name": "deny_string:select * from accounts",
+              "type": "deny_string",
+              "value": "select * from accounts"
+            },
+            {
+              "name": "deny_if.metadata.broadcast.equals:true",
+              "type": "field",
+              "fieldPath": "metadata.broadcast",
+              "operator": "equals",
+              "value": "true"
+            }
+          ]
+        },
+        "soft_limits": {
+          "dailyToolCalls": 300
+        },
+        "execution_limits": {
+          "maxToolCallsPerTask": 20,
+          "maxToolCallsPerHour": 400
+        }
+      },
+      "canonicalPolicyJson": "{\"custom\":{\"rules\":[{\"fieldPath\":\"metadata.job_type\",\"name\":\"allow_only.metadata.job_type\",\"type\":\"allow_field\",\"values\":[\"ticket_reply\",\"status_update\",\"refund_request\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"deny_if.metadata.job_type.contains:test\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"test\"},{\"fieldPath\":\"command\",\"name\":\"deny_if.command.contains:issue_refund\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"issue_refund\"},{\"fieldPath\":\"metadata.action\",\"name\":\"deny_if.metadata.action.equals:refund\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"refund\"},{\"name\":\"deny_string:Social Security Number\",\"type\":\"deny_string\",\"value\":\"Social Security Number\"},{\"name\":\"deny_string:social security number\",\"type\":\"deny_string\",\"value\":\"social security number\"},{\"name\":\"deny_string:SSN:\",\"type\":\"deny_string\",\"value\":\"SSN:\"},{\"name\":\"deny_string:ssn:\",\"type\":\"deny_string\",\"value\":\"ssn:\"},{\"name\":\"deny_string:card number\",\"type\":\"deny_string\",\"value\":\"card number\"},{\"name\":\"deny_string:SELECT * FROM customers\",\"type\":\"deny_string\",\"value\":\"SELECT * FROM customers\"},{\"name\":\"deny_string:select * from customers\",\"type\":\"deny_string\",\"value\":\"select * from customers\"},{\"name\":\"deny_string:SELECT * FROM accounts\",\"type\":\"deny_string\",\"value\":\"SELECT * FROM accounts\"},{\"name\":\"deny_string:select * from accounts\",\"type\":\"deny_string\",\"value\":\"select * from accounts\"},{\"fieldPath\":\"metadata.broadcast\",\"name\":\"deny_if.metadata.broadcast.equals:true\",\"operator\":\"equals\",\"type\":\"field\",\"value\":\"true\"}]},\"execution_limits\":{\"maxToolCallsPerHour\":400,\"maxToolCallsPerTask\":20},\"soft_limits\":{\"dailyToolCalls\":300},\"tool_calls\":{\"allowed\":[\"web_fetch\",\"email.send\"],\"emailAllowedRecipients\":[\"*@customers.example.com\",\"support@sigilcore.com\"],\"emailBlockedRecipients\":[\"all-staff@sigilcore.com\",\"everyone@sigilcore.com\",\"internal@sigilcore.com\"],\"emailRequireApproval\":true,\"webFetchBlockedDomains\":[\"localhost\",\"127.0.0.1\",\"0.0.0.0\",\"169.254.169.254\",\"metadata.google.internal\"]},\"version\":\"2.1.0\"}",
+      "policyHashSha256": "1fc82b80ac336cf294d3cfde65559528ef7a8db2c11c9ae08b699b84fe0aecec"
+    },
+    {
+      "slug": "mcp-server-agent",
+      "sourceCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+      "templateBodySha256": "06d015a8915a7e589b7f0b9eb089d79ee863342cc0e9878ce4bade654724322d",
+      "templateBody": "version: 2.0.0\n\n## mcp\n# Replace these placeholders with the real MCP servers this agent connects to.\nallowed_servers: github, slack, postgres-readonly\n# Enumerate the real tools your deployment uses; a tool not on this list is\n# denied. `github.*` allows every tool on the github server except those\n# blocked below (blocked_tools is checked first).\nallowed_tools: github.*, slack.send_message, postgres-readonly.query\n# Denies the listed destructive tools. `delete_*` matches any tool whose name\n# starts with \"delete_\" on any allowed server.\nblocked_tools: github.delete_repository, github.force_push, delete_*\n\n## tool_calls\n# An MCP gateway agent does not need a raw shell, and every governed channel\n# it does need is typed above — so only email.send remains here.\nallowed: email.send\nemail.require_approval: true\nemail.allowed_recipients: *@sigilcore.com, partner@example.com\nemail.blocked_recipients: noreply@sigilcore.com\n\n## custom\n# Every governed intent must declare an approved job type. Fails closed on a\n# missing job_type; the value is agent-declared unless intents arrive through\n# a trusted shim.\nallow_only.intent.metadata.job_type: tool_call, data_sync, notify\ndeny_if.intent.metadata.job_type contains test\n\n# Denies listed credential strings anywhere in the intent. Case-sensitive\n# substring matching: defense in depth, not a secrets control.\ndeny_string: \"OPENAI_API_KEY\"\ndeny_string: \"ANTHROPIC_API_KEY\"\ndeny_string: \"AWS_SECRET_ACCESS_KEY\"\ndeny_string: \"DATABASE_URL\"\ndeny_string: \"BEGIN RSA PRIVATE KEY\"\n\n## soft_limits\ndaily_tool_calls: 500\n\n## execution_limits\nmax_tool_calls_per_task: 100\nmax_tool_calls_per_hour: 1000\n\n## signature\nsigil-sig: REPLACE_WITH_OUTPUT_FROM_SIGNING_TOOL\n",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "email.send"
+          ],
+          "emailRequireApproval": true,
+          "emailAllowedRecipients": [
+            "*@sigilcore.com",
+            "partner@example.com"
+          ],
+          "emailBlockedRecipients": [
+            "noreply@sigilcore.com"
+          ]
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only.metadata.job_type",
+              "type": "allow_field",
+              "fieldPath": "metadata.job_type",
+              "values": [
+                "tool_call",
+                "data_sync",
+                "notify"
+              ]
+            },
+            {
+              "name": "deny_if.metadata.job_type.contains:test",
+              "type": "field",
+              "fieldPath": "metadata.job_type",
+              "operator": "contains",
+              "value": "test"
+            },
+            {
+              "name": "deny_string:OPENAI_API_KEY",
+              "type": "deny_string",
+              "value": "OPENAI_API_KEY"
+            },
+            {
+              "name": "deny_string:ANTHROPIC_API_KEY",
+              "type": "deny_string",
+              "value": "ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "deny_string:AWS_SECRET_ACCESS_KEY",
+              "type": "deny_string",
+              "value": "AWS_SECRET_ACCESS_KEY"
+            },
+            {
+              "name": "deny_string:DATABASE_URL",
+              "type": "deny_string",
+              "value": "DATABASE_URL"
+            },
+            {
+              "name": "deny_string:BEGIN RSA PRIVATE KEY",
+              "type": "deny_string",
+              "value": "BEGIN RSA PRIVATE KEY"
+            }
+          ]
+        },
+        "mcp": {
+          "allowedServers": [
+            "github",
+            "slack",
+            "postgres-readonly"
+          ],
+          "allowedTools": [
+            "github.*",
+            "slack.send_message",
+            "postgres-readonly.query"
+          ],
+          "blockedTools": [
+            "github.delete_repository",
+            "github.force_push",
+            "delete_*"
+          ]
+        },
+        "soft_limits": {
+          "dailyToolCalls": 500
+        },
+        "execution_limits": {
+          "maxToolCallsPerTask": 100,
+          "maxToolCallsPerHour": 1000
+        }
+      },
+      "canonicalPolicyJson": "{\"custom\":{\"rules\":[{\"fieldPath\":\"metadata.job_type\",\"name\":\"allow_only.metadata.job_type\",\"type\":\"allow_field\",\"values\":[\"tool_call\",\"data_sync\",\"notify\"]},{\"fieldPath\":\"metadata.job_type\",\"name\":\"deny_if.metadata.job_type.contains:test\",\"operator\":\"contains\",\"type\":\"field\",\"value\":\"test\"},{\"name\":\"deny_string:OPENAI_API_KEY\",\"type\":\"deny_string\",\"value\":\"OPENAI_API_KEY\"},{\"name\":\"deny_string:ANTHROPIC_API_KEY\",\"type\":\"deny_string\",\"value\":\"ANTHROPIC_API_KEY\"},{\"name\":\"deny_string:AWS_SECRET_ACCESS_KEY\",\"type\":\"deny_string\",\"value\":\"AWS_SECRET_ACCESS_KEY\"},{\"name\":\"deny_string:DATABASE_URL\",\"type\":\"deny_string\",\"value\":\"DATABASE_URL\"},{\"name\":\"deny_string:BEGIN RSA PRIVATE KEY\",\"type\":\"deny_string\",\"value\":\"BEGIN RSA PRIVATE KEY\"}]},\"execution_limits\":{\"maxToolCallsPerHour\":1000,\"maxToolCallsPerTask\":100},\"mcp\":{\"allowedServers\":[\"github\",\"slack\",\"postgres-readonly\"],\"allowedTools\":[\"github.*\",\"slack.send_message\",\"postgres-readonly.query\"],\"blockedTools\":[\"github.delete_repository\",\"github.force_push\",\"delete_*\"]},\"soft_limits\":{\"dailyToolCalls\":500},\"tool_calls\":{\"allowed\":[\"email.send\"],\"emailAllowedRecipients\":[\"*@sigilcore.com\",\"partner@example.com\"],\"emailBlockedRecipients\":[\"noreply@sigilcore.com\"],\"emailRequireApproval\":true},\"version\":\"2.0.0\"}",
+      "policyHashSha256": "299353b6726658534b99baf68c8ff6520dab304f0e7529dd230101dd4c531e8c"
+    }
+  ]
+}

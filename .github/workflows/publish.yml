@@ -1,0 +1,69 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-tag:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: version
+        name: Match the tag to package.json
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "v$package_version"
+          printf 'version=%s\n' "$package_version" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish ${{ needs.verify-tag.outputs.version }}
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Require the npm trusted-publishing runtime
+        run: |
+          node --input-type=module -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 14)) process.exit(1)"
+          npm install --global npm@11.5.1
+          node --input-type=module -e "const { execFileSync } = await import('node:child_process'); const [major, minor, patch] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number); if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) process.exit(1)"
+      - name: Refuse to republish an immutable npm version
+        run: |
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+          if npm view "$package_name@$package_version" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "Refusing to republish existing npm version $package_name@$package_version" >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:node
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run test:workers
+      - run: npm run build
+      - name: Pack and inspect the public artifact
+        run: |
+          npm pack --json > npm-pack.json
+          package_tgz="$(node --input-type=module -e "const pack = JSON.parse(await (await import('node:fs/promises')).readFile('npm-pack.json', 'utf8')); process.stdout.write(pack[0].filename)")"
+          tar -tzf "$package_tgz" | tee package-files.txt
+          tar -tzf "$package_tgz" | grep -qx 'package/dist/index.js'
+          tar -tzf "$package_tgz" | grep -qx 'package/dist/index.d.ts'
+          tar -tzf "$package_tgz" | grep -qx 'package/LICENSE'
+      - name: Publish with npm trusted publishing
+        run: npm publish --access public --provenance

@@ -1,0 +1,63 @@
+{
+  "name": "@sigilcore/warrant-core",
+  "version": "0.1.0-rc.0",
+  "description": "Platform-neutral parsing, canonicalization, and cryptographic primitives for Sigil Warrant policies.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sigil-Core/warrant-core.git"
+  },
+  "homepage": "https://github.com/Sigil-Core/warrant-core#readme",
+  "bugs": {
+    "url": "https://github.com/Sigil-Core/warrant-core/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./crypto/browser": {
+      "types": "./dist/crypto/browser.d.ts",
+      "import": "./dist/crypto/browser.js"
+    },
+    "./crypto/workers": {
+      "types": "./dist/crypto/workers.d.ts",
+      "import": "./dist/crypto/workers.js"
+    },
+    "./crypto/node": {
+      "types": "./dist/crypto/node.d.ts",
+      "import": "./dist/crypto/node.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run test:node",
+    "test:node": "vitest run --config vitest.config.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:workers": "vitest run --config vitest.workers.config.ts",
+    "test:sign-parity": "node scripts/verify-sigil-sign-parity.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.18.8",
+    "@types/node": "^22.16.5",
+    "@vitest/browser-playwright": "4.1.10",
+    "playwright": "1.62.0",
+    "typescript": "^5.8.3",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

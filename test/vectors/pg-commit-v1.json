@@ -1,0 +1,171 @@
+{
+  "format": "pg-commit-v1-test-vectors/v1",
+  "ordering": "ECMAScript UTF-16 code units",
+  "vectors": [
+    {
+      "id": "basic-nested",
+      "intent": {
+        "z": 1,
+        "a": "two",
+        "nested": {
+          "beta": true,
+          "alpha": null
+        }
+      },
+      "canonicalJson": "{\"a\":\"two\",\"nested\":{\"alpha\":null,\"beta\":true},\"z\":1}",
+      "sha256": "c588d79bcfafd39cacb4c8299ab1c838b4a4bb6374e7587d79d737c497d36182"
+    },
+    {
+      "id": "json-scalars",
+      "intent": {
+        "nullValue": null,
+        "falseValue": false,
+        "negativeZero": 0,
+        "decimal": 1.25,
+        "string": "line\\nbreak"
+      },
+      "canonicalJson": "{\"decimal\":1.25,\"falseValue\":false,\"negativeZero\":0,\"nullValue\":null,\"string\":\"line\\\\nbreak\"}",
+      "sha256": "b67fa211fa338b64ef9af05b3ad0383352eaec4bfec022aeb464869204bbf989"
+    },
+    {
+      "id": "non-ascii",
+      "intent": {
+        "é": "café",
+        "Ω": "π",
+        "note": " "
+      },
+      "canonicalJson": "{\"note\":\" \",\"é\":\"café\",\"Ω\":\"π\"}",
+      "sha256": "dd07b309c3b3f277e1ea89eb3e087739bc6245f6fc3243673a416b6e499bb7c9"
+    },
+    {
+      "id": "utf16-surrogate-order",
+      "intent": {
+        "": "bmp-private",
+        "𐀀": "supplementary",
+        "😀": "emoji"
+      },
+      "canonicalJson": "{\"𐀀\":\"supplementary\",\"😀\":\"emoji\",\"\":\"bmp-private\"}",
+      "sha256": "ce7d2a1838b3e50dc3979524ed0aab564b84abd2ad2a529b623eeb2689b85076"
+    },
+    {
+      "id": "array-order",
+      "intent": {
+        "labels": [
+          "third",
+          "first",
+          "second"
+        ],
+        "steps": [
+          {
+            "z": 1,
+            "a": 2
+          },
+          {
+            "b": 3,
+            "a": 4
+          }
+        ]
+      },
+      "canonicalJson": "{\"labels\":[\"third\",\"first\",\"second\"],\"steps\":[{\"a\":2,\"z\":1},{\"a\":4,\"b\":3}]}",
+      "sha256": "19f14336cc451a029982c7312611dc00ef0b4e62815dc76350a2a8084509a49f"
+    }
+  ],
+  "rejections": [
+    {
+      "id": "undefined",
+      "runtimeValueKind": "undefined",
+      "construction": "{ value: undefined }",
+      "error": "pg-commit-v1 rejects undefined"
+    },
+    {
+      "id": "non-finite-nan",
+      "runtimeValueKind": "nan",
+      "construction": "{ value: Number.NaN }",
+      "error": "pg-commit-v1 rejects non-finite numbers"
+    },
+    {
+      "id": "non-finite-infinity",
+      "runtimeValueKind": "infinity",
+      "construction": "{ value: Number.POSITIVE_INFINITY }",
+      "error": "pg-commit-v1 rejects non-finite numbers"
+    },
+    {
+      "id": "bigint",
+      "runtimeValueKind": "bigint",
+      "construction": "{ value: 1n }",
+      "error": "pg-commit-v1 rejects bigint"
+    },
+    {
+      "id": "function",
+      "runtimeValueKind": "function",
+      "construction": "{ value: () => undefined }",
+      "error": "pg-commit-v1 rejects functions"
+    },
+    {
+      "id": "symbol",
+      "runtimeValueKind": "symbol",
+      "construction": "{ value: Symbol(\"test\") }",
+      "error": "pg-commit-v1 rejects symbols"
+    },
+    {
+      "id": "cyclic",
+      "runtimeValueKind": "cyclic",
+      "construction": "const value = {}; value.self = value",
+      "error": "pg-commit-v1 rejects cyclic values"
+    },
+    {
+      "id": "non-plain-object",
+      "runtimeValueKind": "non-plain-object",
+      "construction": "new Date()",
+      "error": "pg-commit-v1 rejects non-plain objects"
+    },
+    {
+      "id": "symbol-keyed-object-property",
+      "runtimeValueKind": "symbol-keyed-object-property",
+      "construction": "Object.defineProperty({ safe: true }, Symbol(\"test\"), { value: true })",
+      "error": "pg-commit-v1 rejects symbol-keyed object properties"
+    },
+    {
+      "id": "non-enumerable-object-property",
+      "runtimeValueKind": "non-enumerable-object-property",
+      "construction": "Object.defineProperty({ safe: true }, \"hidden\", { value: true })",
+      "error": "pg-commit-v1 rejects non-enumerable object properties"
+    },
+    {
+      "id": "accessor-property",
+      "runtimeValueKind": "accessor-property",
+      "construction": "Object.defineProperty({}, \"value\", { enumerable: true, get: () => \"never\" })",
+      "error": "pg-commit-v1 rejects accessor properties"
+    },
+    {
+      "id": "sparse-array",
+      "runtimeValueKind": "sparse-array",
+      "construction": "const value = []; value[1] = \"present\"",
+      "error": "pg-commit-v1 rejects sparse array holes"
+    },
+    {
+      "id": "non-index-array-property",
+      "runtimeValueKind": "non-index-array-property",
+      "construction": "Object.defineProperty([], \"label\", { enumerable: true, value: \"bad\" })",
+      "error": "pg-commit-v1 rejects non-index array properties"
+    },
+    {
+      "id": "non-enumerable-array-property",
+      "runtimeValueKind": "non-enumerable-array-property",
+      "construction": "Object.defineProperty([\"value\"], \"0\", { enumerable: false, value: \"value\" })",
+      "error": "pg-commit-v1 rejects non-enumerable array properties"
+    },
+    {
+      "id": "non-plain-array",
+      "runtimeValueKind": "non-plain-array",
+      "construction": "const value = []; Object.setPrototypeOf(value, {})",
+      "error": "pg-commit-v1 rejects non-plain arrays"
+    },
+    {
+      "id": "symbol-keyed-array-property",
+      "runtimeValueKind": "symbol-keyed-array-property",
+      "construction": "Object.defineProperty([], Symbol(\"test\"), { value: true })",
+      "error": "pg-commit-v1 rejects symbol-keyed object properties"
+    }
+  ]
+}

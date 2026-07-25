@@ -1,0 +1,71 @@
+{
+  "format": "sigil-sign-parser-parity/v1",
+  "sigilSignCommit": "53b891e0e79aba17e1191854373f4bde1ae42ab4",
+  "cases": [
+    {
+      "id": "evm-default-max-transaction",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "execution-controls-without-numeric-limit",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: bash\n\n## execution_limits\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "soft-limit-controls-without-enforced-limit",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## soft_limits\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "execution-limit-zero",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## execution_limits\nmax_tool_calls_per_task: 0",
+      "outcome": "reject"
+    },
+    {
+      "id": "execution-limit-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## execution_limits\nmax_tool_calls_per_task: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-controls-without-required-fields",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## evm\nrequire_approval: wallet.transfer\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-missing-allowed-chains",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## evm\nallowed_actions: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "tool-controls-without-allowed-list",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## tool_calls\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "tool-call-execution-limit-is-not-root-enforcement",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 5",
+      "outcome": "reject"
+    }
+  ]
+}
