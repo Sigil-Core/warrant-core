@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "51ffd188eed7e53c5e2db8374f7bbc8bee41300a",
+  "sigilSignCommit": "21018a4b06c5fab0b514a26069d4fb92bb96f6a6",
   "cases": [
     {
       "id": "evm-default-max-transaction",
@@ -591,6 +591,139 @@
     {
       "id": "policy-2.1-database-bare-wildcard",
       "markdown": "version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nallowed_resources: *\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "token-decimals-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: 6units",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "tokenRules": {
+            "USDC": {
+              "maxTransaction": "100",
+              "decimals": 6
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "token-decimals-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "token-decimals-negative",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: -1",
+      "outcome": "reject"
+    },
+    {
+      "id": "token-decimals-above-maximum",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: 37",
+      "outcome": "reject"
+    },
+    {
+      "id": "allow-only-empty-normalized-intent-path",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.: safe",
+      "outcome": "reject"
+    },
+    {
+      "id": "deny-if-empty-normalized-intent-path",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_if.intent. equals unsafe",
+      "outcome": "reject"
+    },
+    {
+      "id": "consensus-threshold-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: 1.5ETH",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "consensusThresholdEth": 1.5
+        }
+      }
+    },
+    {
+      "id": "consensus-threshold-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "normalized-leading-zero-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  \"01\": wallet.transfer",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "duplicate-quoted-unquoted-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  1: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-leading-zero-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  \"01\": wallet.transfer\n  1: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-first-duplicate-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: ,\n  01: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-chain-action-list",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  01: ,",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-policy-heading",
+      "markdown": "version: 2.0.0\n\n ## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-ordinary-evm-key",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_actions: contract.call\nallowed_chains: 1",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-chain-actions-header",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nchain_actions:\n  8453: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-token-scalar",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200",
       "outcome": "reject"
     }
   ]

@@ -1,0 +1,30 @@
+{
+  "format": "warrant-core-parser-hardening/v1",
+  "cases": [
+    {
+      "id": "duplicate-normalized-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\n  \"1\": contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-policy-heading",
+      "markdown": "version: 2.0.0\n\n ## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-ordinary-evm-key",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_actions: contract.call\nallowed_chains: 1",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-chain-actions-header",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nchain_actions:\n  8453: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-token-scalar",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200",
+      "outcome": "reject"
+    }
+  ]
+}

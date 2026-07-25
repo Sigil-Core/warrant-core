@@ -89,6 +89,9 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
 interface Section { name: string; body: string; }
 
 function sectionsOf(markdown: string): Section[] {
+  if (/^ {1,3}##\s+\S.*$/m.test(markdown)) {
+    throw new Error("Indented policy headings are not supported");
+  }
   const headers = [...markdown.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => ({ name: match[1]!.trim().toLowerCase(), start: match.index!, end: match.index! + match[0].length }));
   const seen = new Set<string>();
   return headers.map((header, index) => {
@@ -217,7 +220,11 @@ function unique(lines: string[], section: string): Array<[string, string]> {
 
 function parseEvmChainActions(body: string): Record<string, string[]> | undefined {
   const lines = body.split("\n");
-  const headerIndex = lines.findIndex((line) => /^\s*chain_actions:\s*$/.test(line) && !/^\s*#/.test(line));
+  const headerIndices = lines
+    .map((line, index) => (/^\s*chain_actions:\s*$/.test(line) && !/^\s*#/.test(line) ? index : -1))
+    .filter((index) => index >= 0);
+  if (headerIndices.length > 1) throw new Error("Duplicate EVM policy key: chain_actions");
+  const headerIndex = headerIndices[0] ?? -1;
   if (headerIndex < 0) return undefined;
   const boundaryOffset = lines.slice(headerIndex + 1).findIndex((line) =>
     line.trim() !== ""
@@ -230,6 +237,8 @@ function parseEvmChainActions(body: string): Record<string, string[]> | undefine
     if (dangling) throw new Error("Dangling chain_actions mapping after the block boundary");
   }
   const result: Record<string, string[]> = {};
+  const seenChainIds = new Set<string>();
+  let emptyChainId: string | undefined;
   for (let index = headerIndex + 1; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     if (line.trim() === "" || /^\s*#/.test(line)) continue;
@@ -237,8 +246,19 @@ function parseEvmChainActions(body: string): Record<string, string[]> | undefine
     const normalized = line.replace(/#.*$/, "").trim();
     if (/^(?:require_approval|require_shim)\s*:/.test(normalized)) continue;
     const match = normalized.match(/^"?(\d+)"?\s*:\s*(.+)$/);
-    if (match) result[match[1]!] = list(match[2]!);
+    if (match) {
+      const chainId = match[1]!.replace(/^0+(?=\d)/, "");
+      if (seenChainIds.has(chainId)) throw new Error(`Duplicate chain_actions chain ID: ${chainId}`);
+      seenChainIds.add(chainId);
+      const actions = list(match[2]!);
+      if (!actions.length) {
+        emptyChainId ??= chainId;
+        continue;
+      }
+      result[chainId] = actions;
+    }
   }
+  if (emptyChainId !== undefined) throw new Error(`chain_actions entry for chain ${emptyChainId} must contain at least one action`);
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
@@ -247,9 +267,17 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
   const tokens: Record<string, Record<string, unknown>> = {};
   const chainActions = parseEvmChainActions(body);
   const genericControls = new Set<string>();
+  const ordinaryKeys = new Set<string>();
+  const tokenFields = new Set<string>();
   let chains = false;
+  let chainActionsSeen = false;
   for (const line of lines) {
-    if (line === "chain_actions:") { chains = true; continue; }
+    if (line === "chain_actions:") {
+      if (chainActionsSeen) throw new Error("Duplicate EVM policy key: chain_actions");
+      chainActionsSeen = true;
+      chains = true;
+      continue;
+    }
     const generic = line.match(/^(require_approval|require_shim):\s*(.+)$/);
     if (generic) {
       parseGenericControl(result, generic[1]!, generic[2]!, isV2, genericControls);
@@ -259,8 +287,21 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
     chains = false;
     const token = line.match(/^token\.([A-Za-z0-9_]+)\.(max_transaction|consensus_threshold|decimals|addresses):\s*(.+)$/);
     if (token) {
-      const profile = tokens[token[1]!.toUpperCase()] ??= {};
-      if (token[2] === "decimals") profile.decimals = integer(token[3]!);
+      const symbol = token[1]!.toUpperCase();
+      const field = token[2]!;
+      const tokenField = `${symbol}.${field}`;
+      if (field !== "addresses" && tokenFields.has(tokenField)) {
+        throw new Error(`Duplicate EVM token policy key: token.${tokenField}`);
+      }
+      tokenFields.add(tokenField);
+      const profile = tokens[symbol] ??= {};
+      if (token[2] === "decimals") {
+        const parsed = integer(token[3]!);
+        if (parsed === undefined || !Number.isInteger(parsed) || parsed < 0 || parsed > 36) {
+          throw new Error(`token.${token[1]}.decimals must be an integer from 0 through 36`);
+        }
+        profile.decimals = parsed;
+      }
       else if (token[2] === "addresses") profile.addresses = [...new Set([...(profile.addresses as string[] ?? []), ...list(token[3]!).map((entry) => entry.toLowerCase())])];
       else if (token[2] === "max_transaction") profile.maxTransaction = token[3]!.trim();
       else profile.consensusThreshold = token[3]!.trim();
@@ -268,6 +309,8 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
     }
     const [key, value] = requireKeyValue(line, "EVM");
     if (parseGenericControl(result, key, value, isV2, genericControls)) continue;
+    if (ordinaryKeys.has(key)) throw new Error(`Duplicate EVM policy key: ${key}`);
+    ordinaryKeys.add(key);
     if (key === "max_transaction_eth") {
       const parsed = number(value);
       if (parsed === undefined || parsed <= 0) throw new Error("max_transaction_eth must be greater than zero");
@@ -275,7 +318,11 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
     }
     else if (key === "allowed_actions") result.allowedActions = list(value);
     else if (key === "allowed_chains") result.allowedChains = list(value).map(integer).filter((entry): entry is number => entry !== undefined && entry > 0);
-    else if (key === "consensus_threshold_eth") result.consensusThresholdEth = number(value);
+    else if (key === "consensus_threshold_eth") {
+      const parsed = number(value);
+      if (parsed === undefined) throw new Error("consensus_threshold_eth must be numeric");
+      result.consensusThresholdEth = parsed;
+    }
     else if (key === "consensus_require_hold") result.requireHold = boolean(value, key, isV2);
     else throw new Error(`Unrecognized EVM policy key: ${key}`);
   }
@@ -335,6 +382,7 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
       if (!isV2 && (allow[1] || allow[3] || allow[4])) throw new Error("Policy syntax requires version 2.0.0");
       const actionScope = allow[1]?.trim(); if (actionScope === "") throw new Error("allow_only action scope must not be empty");
       const fieldPath = stripIntent(allow[2]!); const operator = allow[4] === "prefix" ? "starts_with" : (allow[4] ?? "equals"); const values = list(allow[5]!);
+      if (!fieldPath) throw new Error("allow_only field path must not be empty");
       if (!values.length) throw new Error(`allow_only.${fieldPath} must contain at least one value`);
       const scope = `${actionScope ?? "<global>"}::${fieldPath}`;
       if (operators.has(scope) && operators.get(scope) !== operator) throw new Error(`allow_only.${fieldPath} mixes operators (${operators.get(scope)}, ${operator}); use one operator per field and action scope`);
@@ -344,7 +392,7 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
       continue;
     }
     const deny = line.match(/^deny_if\.(\S+)\s+(contains|starts_with|ends_with|matches|equals|not_equals)\s+(.+)$/);
-    if (deny) { const fieldPath = stripIntent(deny[1]!); const value = unquote(deny[3]!); rules.push({ name: `deny_if.${fieldPath}.${deny[2]}:${value}`, type: "field", fieldPath, operator: deny[2]!, value }); continue; }
+    if (deny) { const fieldPath = stripIntent(deny[1]!); if (!fieldPath) throw new Error("deny_if field path must not be empty"); const value = unquote(deny[3]!); rules.push({ name: `deny_if.${fieldPath}.${deny[2]}:${value}`, type: "field", fieldPath, operator: deny[2]!, value }); continue; }
     const string = line.match(/^deny_string:\s*(.+)$/);
     if (string) { const value = unquote(string[1]!); rules.push({ name: `deny_string:${value}`, type: "deny_string", value }); continue; }
     throw new Error(`Unrecognized custom rule: ${line}`);

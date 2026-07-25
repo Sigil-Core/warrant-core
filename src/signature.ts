@@ -1,7 +1,7 @@
 import type { SplitSignatureBlock } from "./types.js";
 import { maskHtmlComments } from "./html-comments.js";
 
-const signatureHeader = /^##\s+signature\s*$/im;
+const signatureHeader = /^##[ \t]+signature[ \t]*$/im;
 const signatureValue = /^sigil-sig:[ \t]*([A-Za-z0-9_-]+)[ \t]*$/;
 
 export function splitSignatureBlock(markdown: string): SplitSignatureBlock {

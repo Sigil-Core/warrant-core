@@ -163,6 +163,59 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_shim: true\n  \"1\": *")).toThrow("Dangling chain_actions mapping");
   });
 
+  it("rejects duplicate normalized EVM chain action IDs", () => {
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  \"01\": wallet.transfer").evm?.chainActions).toEqual({ "1": ["wallet.transfer"] });
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\n  \"1\": contract.call")).toThrow("Duplicate chain_actions chain ID: 1");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  \"01\": wallet.transfer\n  1: contract.call")).toThrow("Duplicate chain_actions chain ID: 1");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: ,\n  01: wallet.transfer")).toThrow("Duplicate chain_actions chain ID: 1");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  01: ,")).toThrow("chain_actions entry for chain 1 must contain at least one action");
+  });
+
+  it("validates token decimals while preserving deployed numeric-prefix parsing", () => {
+    const markdown = (decimals: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: ${decimals}`;
+    expect(parsePolicyMarkdown(markdown("6units")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 6 } });
+    for (const decimals of ["nope", "-1", "37"]) {
+      expect(() => parsePolicyMarkdown(markdown(decimals))).toThrow("must be an integer from 0 through 36");
+    }
+  });
+
+  it("rejects policy headings with Markdown indentation instead of omitting their controls", () => {
+    for (const indent of [" ", "  ", "   "]) {
+      const markdown = `version: 2.0.0\n\n${indent}## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\n## tool_calls\nallowed: bash`;
+      expect(() => parsePolicyMarkdown(markdown)).toThrow("Indented policy headings are not supported");
+    }
+  });
+
+  it("rejects duplicate ordinary EVM declarations", () => {
+    const base = "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1";
+    for (const duplicate of [
+      "max_transaction_eth: 1\nmax_transaction_eth: 2",
+      "allowed_actions: wallet.transfer\nallowed_actions: contract.call",
+      "allowed_chains: 1\nallowed_chains: 8453",
+      "consensus_threshold_eth: 1\nconsensus_threshold_eth: 2",
+      "consensus_require_hold: true\nconsensus_require_hold: false",
+    ]) {
+      expect(() => parsePolicyMarkdown(`${base}\n${duplicate}`)).toThrow("Duplicate EVM policy key");
+    }
+  });
+
+  it("rejects duplicate chain-action headers and scalar token declarations", () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nchain_actions:\n  8453: contract.call")).toThrow("Duplicate EVM policy key: chain_actions");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200")).toThrow("Duplicate EVM token policy key: token.USDC.max_transaction");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.addresses: 0xA\ntoken.usdc.addresses: 0xB").evm?.tokenRules).toEqual({
+      USDC: {
+        maxTransaction: "100",
+        addresses: ["0xa", "0xb"],
+      },
+    });
+  });
+
+  it("rejects invalid consensus thresholds while preserving deployed numeric-prefix parsing", () => {
+    const markdown = (threshold: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: ${threshold}`;
+    expect(parsePolicyMarkdown(markdown("1.5ETH")).evm?.consensusThresholdEth).toBe(1.5);
+    expect(() => parsePolicyMarkdown(markdown("nope"))).toThrow("consensus_threshold_eth must be numeric");
+  });
+
   for (const parityCase of sigilSignParity.cases) {
     it(`matches frozen Sigil Sign parser behavior for ${parityCase.id}`, () => {
       if (parityCase.outcome === "accept") {
@@ -184,6 +237,8 @@ describe("warranty.md parser", () => {
   it("rejects empty custom policies and invalid HTTP DNS labels", () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toThrow("must contain an enforceable policy block");
     expect(() => parsePolicyMarkdown("## tool_calls\nallowed: bash\n\n## custom\ndeny_strng: SECRET")).toThrow("Unrecognized custom rule");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nallow_only.intent.: safe")).toThrow("allow_only field path must not be empty");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\ndeny_if.intent. equals unsafe")).toThrow("deny_if field path must not be empty");
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: bash\n\n## custom\n# no rules")).toEqual({
       version: "2.0.0",
       tool_calls: { allowed: ["bash"] },
@@ -371,5 +426,13 @@ describe("signature blocks", () => {
     });
     expect(() => splitSignatureBlock("version: 2.0.0\n<!--\n## signature")).toThrow("Unterminated HTML comment");
     expect(() => appendSignatureBlock("version: 2.0.0\n<!--\n## signature", "abc")).toThrow("Unterminated HTML comment");
+  });
+
+  it("does not treat a heading split across lines as a signature block", () => {
+    const markdown = "version: 2.0.0\n\n##\nsignature\nsigil-sig: abc";
+    expect(splitSignatureBlock(markdown)).toEqual({ unsigned: markdown });
+    expect(appendSignatureBlock(markdown, "real_signature")).toBe(
+      `${markdown}\n\n## signature\nsigil-sig: real_signature\n`,
+    );
   });
 });

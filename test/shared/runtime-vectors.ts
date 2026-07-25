@@ -15,6 +15,7 @@ import type { CryptoAdapter, JsonValue } from "../../src/types.js";
 import launchScenarioFixture from "../vectors/launch-scenarios.json";
 import commitmentFixture from "../vectors/pg-commit-v1.json";
 import genericControlParityFixture from "../vectors/generic-control-parity.json";
+import parserHardeningFixture from "../vectors/parser-hardening.json";
 import policyFixture from "../vectors/policy-fixtures.json";
 import sigilSignParserParityFixture from "../vectors/sigil-sign-parser-parity.json";
 import signatureFixture from "../vectors/signature-blocks.json";
@@ -96,6 +97,8 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
     const unterminated = "version: 2.0.0\n<!--\n## signature";
     expect(() => splitSignatureBlock(unterminated)).toThrow("Unterminated HTML comment");
     expect(() => appendSignatureBlock(unterminated, "abc")).toThrow("Unterminated HTML comment");
+    const splitHeading = "version: 2.0.0\n\n##\nsignature\nsigil-sig: abc";
+    expect(splitSignatureBlock(splitHeading)).toEqual({ unsigned: splitHeading });
   });
 
   it(`validates version 2 daily EVM decimals before number conversion in ${runtime}`, () => {
@@ -131,6 +134,17 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
           expect(parsePolicyMarkdown(parityCase.markdown)).toEqual(parityCase.canonicalPolicy);
         } else {
           expect(() => parsePolicyMarkdown(parityCase.markdown)).toThrow();
+        }
+      });
+    }
+
+    for (const hardeningCase of parserHardeningFixture.cases) {
+      it(`matches the ${hardeningCase.id} warrant-core parser-hardening vector`, () => {
+        if (hardeningCase.outcome === "accept") {
+          if (!("canonicalPolicy" in hardeningCase)) throw new Error(`Missing canonical policy for ${hardeningCase.id}`);
+          expect(parsePolicyMarkdown(hardeningCase.markdown)).toEqual(hardeningCase.canonicalPolicy);
+        } else {
+          expect(() => parsePolicyMarkdown(hardeningCase.markdown)).toThrow();
         }
       });
     }
