@@ -104,6 +104,34 @@ function sectionsOf(markdown: string): Section[] {
   });
 }
 
+function isOneDeletionAway(shorter: string, longer: string): boolean {
+  return shorter.length + 1 === longer.length
+    && Array.from({ length: longer.length }, (_, index) => longer.slice(0, index) + longer.slice(index + 1)).includes(shorter);
+}
+
+function isOneSubstitutionOrTransposition(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  const mismatches = Array.from({ length: left.length }, (_, index) => index)
+    .filter((index) => left[index] !== right[index]);
+  if (mismatches.length === 1) return true;
+  const [first, second] = mismatches;
+  return mismatches.length === 2
+    && first !== undefined
+    && second !== undefined
+    && second === first + 1
+    && left[first] === right[second]
+    && left[second] === right[first];
+}
+
+function isLikelyVersionKeyTypo(candidate: string): boolean {
+  const source = candidate.toLowerCase();
+  const target = "version";
+  if (source.length === target.length) return isOneSubstitutionOrTransposition(source, target);
+  return source.length < target.length
+    ? isOneDeletionAway(source, target)
+    : isOneDeletionAway(target, source);
+}
+
 function parseVersion(markdown: string): string {
   const structural = maskHtmlComments(markdown);
   const firstSection = structural.search(/^##\s+/m);
@@ -121,7 +149,8 @@ function parseVersion(markdown: string): string {
     if (/^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)) {
       throw new Error(`Invalid root version declaration: ${trimmed}`);
     }
-    if (/^\s*(?:ver[\w-]*|[\w-]*sion)\s*:/i.test(line)) {
+    const rootKey = unquotedMarkdown.match(/^([A-Za-z][\w-]*)(?:\s*[:=]|\s+\d+\.\d+\.\d+(?:\s|$))/)?.[1];
+    if (rootKey && isLikelyVersionKeyTypo(rootKey)) {
       throw new Error(`Unrecognized root policy field: ${trimmed}`);
     }
   }
@@ -287,7 +316,7 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
     if (deny) { const fieldPath = stripIntent(deny[1]!); const value = unquote(deny[3]!); rules.push({ name: `deny_if.${fieldPath}.${deny[2]}:${value}`, type: "field", fieldPath, operator: deny[2]!, value }); continue; }
     const string = line.match(/^deny_string:\s*(.+)$/);
     if (string) { const value = unquote(string[1]!); rules.push({ name: `deny_string:${value}`, type: "deny_string", value }); continue; }
-    if (isV2) throw new Error(`Unrecognized custom rule: ${line}`);
+    throw new Error(`Unrecognized custom rule: ${line}`);
   }
   if (!rules.length && controls.requireApproval === undefined && controls.requireShim === undefined) {
     return undefined;
