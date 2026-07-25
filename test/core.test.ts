@@ -142,11 +142,15 @@ describe("warranty.md parser", () => {
   });
 
   it("rejects empty custom policies and invalid HTTP DNS labels", () => {
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toThrow("must declare at least one rule");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toThrow("must contain an enforceable policy block");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: bash\n\n## custom\n# no rules")).toEqual({
+      version: "2.0.0",
+      tool_calls: { allowed: ["bash"] },
+    });
     for (const host of ["api..example.com", "api-.example.com", "-api.example.com"]) {
       expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: ${host}`)).toThrow("valid lowercase host names");
     }
-    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: api.example.com, *.example.com").tool_calls?.httpAllowedHosts).toEqual(["api.example.com", "*.example.com"]);
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: API.Example.Com., *.example.com").tool_calls?.httpAllowedHosts).toEqual(["api.example.com", "*.example.com"]);
   });
 
   it("matches Sigil Sign when execution controls have no numeric limit", () => {

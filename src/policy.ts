@@ -57,7 +57,10 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
     const lines = cleanedLines(section.body);
     if (section.name === "evm") result.evm = parseEvm(lines, isV2);
     else if (section.name === "tool_calls") result.tool_calls = parseToolCalls(lines, isV2);
-    else if (section.name === "custom") result.custom = parseCustom(lines, isV2);
+    else if (section.name === "custom") {
+      const custom = parseCustom(lines, isV2);
+      if (custom !== undefined) result.custom = custom;
+    }
     else if (section.name === "mcp") result.mcp = parseMcp(lines, isV2);
     else if (section.name === "soft_limits") result.soft_limits = parseSoftLimits(lines, isV2);
     else if (section.name === "execution_limits") result.execution_limits = parseExecutionLimits(lines, isV2);
@@ -244,7 +247,7 @@ function parseToolCalls(lines: string[], isV2: boolean): Record<string, unknown>
       result[key === "http.allowed_methods" ? "httpAllowedMethods" : "httpBlockedMethods"] = [...new Set(methods)];
     } else if (key === "http.allowed_hosts") {
       if (!isV2) throw new Error("http policy keys require version 2.0.0");
-      const hosts = list(value).map((entry) => entry.toLowerCase());
+      const hosts = list(value).map((entry) => entry.toLowerCase().replace(/\.$/, ""));
       if (!hosts.length || hosts.some((host) => !validPolicyHost(host))) throw new Error("http.allowed_hosts must contain valid lowercase host names (use *.example.com for subdomains)");
       result.httpAllowedHosts = [...new Set(hosts)];
     } else throw new Error(`Unrecognized tool_calls policy key: ${key}`);
@@ -255,7 +258,7 @@ function parseToolCalls(lines: string[], isV2: boolean): Record<string, unknown>
   return result;
 }
 
-function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } {
+function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined {
   const rules: Array<Record<string, unknown>> = [];
   const controls: Record<string, unknown> = {};
   const genericControls = new Set<string>();
@@ -287,7 +290,7 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
     if (isV2) throw new Error(`Unrecognized custom rule: ${line}`);
   }
   if (!rules.length && controls.requireApproval === undefined && controls.requireShim === undefined) {
-    throw new Error("## custom must declare at least one rule or generic control");
+    return undefined;
   }
   return { rules, ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}), ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}) };
 }
