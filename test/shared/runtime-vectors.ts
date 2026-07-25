@@ -24,27 +24,60 @@ function bytesFromBase64url(value: string): Uint8Array {
   return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
 }
 
-function rejectionValue(id: string): unknown {
-  if (id === "undefined") return { value: undefined };
-  if (id === "non-finite-nan") return { value: Number.NaN };
-  if (id === "non-finite-infinity") return { value: Number.POSITIVE_INFINITY };
-  if (id === "bigint") return { value: 1n };
-  if (id === "function") return { value: () => undefined };
-  if (id === "symbol") return { value: Symbol("test") };
-  if (id === "cyclic") { const value: { self?: unknown } = {}; value.self = value; return value; }
-  if (id === "non-plain-object") return new Date();
-  if (id === "symbol-keyed-object-property") { const value = { safe: true }; Object.defineProperty(value, Symbol("test"), { value: true }); return value; }
-  if (id === "non-enumerable-object-property") { const value = { safe: true }; Object.defineProperty(value, "hidden", { value: true }); return value; }
-  if (id === "accessor-property") { const value = {}; Object.defineProperty(value, "value", { enumerable: true, get: () => "never" }); return value; }
-  if (id === "sparse-array") { const value: unknown[] = []; value[1] = "present"; return value; }
-  if (id === "non-index-array-property") { const value: unknown[] = []; Object.defineProperty(value, "label", { enumerable: true, value: "bad" }); return value; }
-  if (id === "non-enumerable-array-property") { const value = ["value"]; Object.defineProperty(value, "0", { enumerable: false, value: "value" }); return value; }
-  if (id === "non-plain-array") { const value: unknown[] = []; Object.setPrototypeOf(value, {}); return value; }
-  if (id === "symbol-keyed-array-property") { const value: unknown[] = []; Object.defineProperty(value, Symbol("test"), { value: true }); return value; }
-  throw new Error(`Missing pg-commit-v1 rejection constructor for ${id}`);
+const pgCommitRejectionValues = {
+  undefined: () => ({ value: undefined }),
+  nan: () => ({ value: Number.NaN }),
+  infinity: () => ({ value: Number.POSITIVE_INFINITY }),
+  bigint: () => ({ value: 1n }),
+  function: () => ({ value: () => undefined }),
+  symbol: () => ({ value: Symbol("test") }),
+  cyclic: () => { const value: { self?: unknown } = {}; value.self = value; return value; },
+  "non-plain-object": () => new Date(),
+  "symbol-keyed-object-property": () => { const value = { safe: true }; Object.defineProperty(value, Symbol("test"), { value: true }); return value; },
+  "non-enumerable-object-property": () => { const value = { safe: true }; Object.defineProperty(value, "hidden", { value: true }); return value; },
+  "accessor-property": () => { const value = {}; Object.defineProperty(value, "value", { enumerable: true, get: () => "never" }); return value; },
+  "sparse-array": () => { const value: unknown[] = []; value[1] = "present"; return value; },
+  "non-index-array-property": () => { const value: unknown[] = []; Object.defineProperty(value, "label", { enumerable: true, value: "bad" }); return value; },
+  "non-enumerable-array-property": () => { const value = ["value"]; Object.defineProperty(value, "0", { enumerable: false, value: "value" }); return value; },
+  "non-plain-array": () => { const value: unknown[] = []; Object.setPrototypeOf(value, {}); return value; },
+  "symbol-keyed-array-property": () => { const value: unknown[] = []; Object.defineProperty(value, Symbol("test"), { value: true }); return value; },
+};
+
+export function pgCommitRejectionValue(kind: string): unknown {
+  const construct = pgCommitRejectionValues[kind as keyof typeof pgCommitRejectionValues];
+  if (!construct) throw new Error(`Missing pg-commit-v1 rejection constructor for ${kind}`);
+  return construct();
 }
 
 export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoAdapter): void {
+  it(`preserves established Warrant collation in ${runtime}`, () => {
+    const policy = {
+      chainActions: {
+        "a-b": ["x"],
+        ab: ["x"],
+        "é": ["x"],
+        e: ["x"],
+        Z: ["x"],
+        a: ["x"],
+        "a_": ["x"],
+        "a-": ["x"],
+        "ä": ["x"],
+        z: ["x"],
+      },
+    };
+    expect(canonicalizePolicyObject(policy)).toBe(
+      "{\"chainActions\":{\"a\":[\"x\"],\"ä\":[\"x\"],\"a_\":[\"x\"],\"a-\":[\"x\"],\"a-b\":[\"x\"],\"ab\":[\"x\"],\"e\":[\"x\"],\"é\":[\"x\"],\"z\":[\"x\"],\"Z\":[\"x\"]}}",
+    );
+  });
+
+  it(`uses a deterministic Warrant collation tie-breaker in ${runtime}`, () => {
+    const first = { chainActions: { "a\u00ad": ["x"], a: ["x"] } };
+    const reversed = { chainActions: { a: ["x"], "a\u00ad": ["x"] } };
+    const expected = "{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}";
+    expect(canonicalizePolicyObject(first)).toBe(expected);
+    expect(canonicalizePolicyObject(reversed)).toBe(expected);
+  });
+
   describe(`${runtime} shared policy, commitment, and signature vectors`, () => {
     for (const fixture of policyFixture.fixtures) {
       it(`matches the ${fixture.slug} policy vector`, async () => {
@@ -88,7 +121,7 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
 
     for (const rejection of commitmentFixture.rejections) {
       it(`rejects the ${rejection.id} commitment vector`, () => {
-        expect(() => canonicalizePgCommitV1(rejectionValue(rejection.id))).toThrow(rejection.error);
+        expect(() => canonicalizePgCommitV1(pgCommitRejectionValue(rejection.runtimeValueKind))).toThrow(rejection.error);
       });
     }
 

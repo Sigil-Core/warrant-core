@@ -43,6 +43,34 @@ const sigilSignParity = JSON.parse(readFileSync(new URL("./vectors/sigil-sign-pa
 };
 
 describe("warranty.md parser", () => {
+  it("preserves established Warrant collation in Node", () => {
+    const policy = {
+      chainActions: {
+        "a-b": ["x"],
+        ab: ["x"],
+        "é": ["x"],
+        e: ["x"],
+        Z: ["x"],
+        a: ["x"],
+        "a_": ["x"],
+        "a-": ["x"],
+        "ä": ["x"],
+        z: ["x"],
+      },
+    };
+    expect(canonicalizePolicyObject(policy)).toBe(
+      "{\"chainActions\":{\"a\":[\"x\"],\"ä\":[\"x\"],\"a_\":[\"x\"],\"a-\":[\"x\"],\"a-b\":[\"x\"],\"ab\":[\"x\"],\"e\":[\"x\"],\"é\":[\"x\"],\"z\":[\"x\"],\"Z\":[\"x\"]}}",
+    );
+  });
+
+  it("uses a deterministic tie-breaker for collation-equal policy keys", () => {
+    const first = { chainActions: { "a\u00ad": ["x"], a: ["x"] } };
+    const reversed = { chainActions: { a: ["x"], "a\u00ad": ["x"] } };
+    const expected = "{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}";
+    expect(canonicalizePolicyObject(first)).toBe(expected);
+    expect(canonicalizePolicyObject(reversed)).toBe(expected);
+  });
+
   it("parses all canonical fixture policies and preserves their policy hashes", async () => {
     const adapter = createNodeCryptoAdapter();
     for (const fixture of fixtures) {
@@ -68,6 +96,13 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## mcp\nallowed_tools: github.delete\nblocked_tools: github.delete")).toThrow("same tool");
   });
 
+  it("enforces the Policy 2.1 resource schemas used by Sigil Sign", () => {
+    expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## repository\nroots: .\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: unknown\nrequire_shim: true")).toThrow("unsupported value");
+    expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: relative\nread_roots: .\nallowed_effects: overwrite\nrequire_shim: true")).toThrow("canonical absolute paths");
+    expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## git\nactions: git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https\nallowed_operations: status\nrequire_approval: force_push\nblocked_operations: force_push\nprotected_refs: refs/heads/main\nrequire_shim: true")).toThrow("subset of allowed_operations");
+    expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nallowed_resources: *\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true")).toThrow("bare *");
+  });
+
   it("matches Sigil Sign generic approval and shim control output across typed blocks", () => {
     const policy = parsePolicyMarkdown(genericControlVector.markdown);
     expect(policy).toEqual(genericControlVector.canonicalPolicy);
@@ -77,6 +112,7 @@ describe("warranty.md parser", () => {
   for (const parityCase of sigilSignParity.cases) {
     it(`matches frozen Sigil Sign parser behavior for ${parityCase.id}`, () => {
       if (parityCase.outcome === "accept") {
+        if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);
         expect(parsePolicyMarkdown(parityCase.markdown)).toEqual(parityCase.canonicalPolicy);
       } else {
         expect(() => parsePolicyMarkdown(parityCase.markdown)).toThrow();

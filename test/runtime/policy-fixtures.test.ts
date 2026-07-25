@@ -22,10 +22,6 @@ const vectorFile = new URL("../vectors/policy-fixtures.json", import.meta.url);
 const fixtures = (JSON.parse(readFileSync(vectorFile, "utf8")) as { fixtures: PolicyFixture[] }).fixtures;
 const nodeCrypto = createNodeCryptoAdapter();
 
-function unsignedPolicy(templateBody: string): string {
-  return templateBody.replace(/\n## signature[\s\S]*$/i, "").trimEnd();
-}
-
 describe("pinned SOF policy fixtures", () => {
   it("contains all six pinned source bodies", () => {
     expect(fixtures.map((fixture) => fixture.slug)).toEqual([
@@ -43,7 +39,7 @@ describe("pinned SOF policy fixtures", () => {
       expect(createHash("sha256").update(fixture.templateBody, "utf8").digest("hex"))
         .toBe(fixture.templateBodySha256);
 
-      const parsed = parsePolicyMarkdown(unsignedPolicy(fixture.templateBody));
+      const parsed = parsePolicyMarkdown(fixture.templateBody);
       expect(parsed).toEqual(fixture.canonicalPolicy);
       expect(canonicalizePolicyObject(parsed)).toBe(fixture.canonicalPolicyJson);
       await expect(hashPolicy(nodeCrypto, parsed)).resolves.toBe(fixture.policyHashSha256);

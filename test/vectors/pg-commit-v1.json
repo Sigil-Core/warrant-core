@@ -20,7 +20,7 @@
       "intent": {
         "nullValue": null,
         "falseValue": false,
-        "negativeZero": 0,
+        "negativeZero": -0,
         "decimal": 1.25,
         "string": "line\\nbreak"
       },

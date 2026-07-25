@@ -51,7 +51,8 @@ The package intentionally exposes two distinct profiles. Their different sort ru
 
 Use `canonicalizePolicyObject` and `hashPolicy` for an existing Sigil Warrant `policyHash`.
 
-- Object keys sort with JavaScript `localeCompare`.
+- Object keys sort with JavaScript `localeCompare` pinned to `en-US`; distinct
+  collation-equal keys use UTF-16 code-unit order as a deterministic tie-breaker.
 - Array order stays unchanged.
 - Object properties with `undefined` values are omitted.
 - `null`, strings, booleans, and finite numbers serialize as JSON.
@@ -132,6 +133,8 @@ npm run test:sign-parity -- /absolute/path/to/sigil-sign
 ```
 
 The gate signs only with the published RFC 8032 test key. It compares all six pinned canonical policies plus the parser edge-case corpus against Sigil Sign's compiled parser. It never reads an operator or production key.
+
+That frozen corpus records two legacy EVM compatibility behaviors from the pinned Sign parser: decimal fields accept a leading numeric prefix, and chain entries use their leading integer while filtering nonpositive or nonnumeric results. The package preserves those results for byte-for-byte consumer parity. Treat `parsePolicyMarkdown` as a Sign compatibility parser, not as a standalone lexical validator. Tightening either behavior requires a coordinated Sign parser change, new frozen vectors, and synchronized consumer releases.
 
 ## Release and npm trusted publishing
 

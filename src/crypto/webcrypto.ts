@@ -1,7 +1,26 @@
 import type { CryptoAdapter } from "../types.js";
 
+/**
+ * Minimal Web Crypto boundary kept local so the platform-neutral core does
+ * not pull DOM ambient types into its compilation contract.
+ */
+export interface WebCryptoKey {}
+
+export interface WebCryptoSubtle {
+  digest(algorithm: string, data: ArrayBuffer): Promise<ArrayBuffer>;
+  importKey(
+    format: "pkcs8" | "spki",
+    keyData: ArrayBuffer,
+    algorithm: { name: "Ed25519" },
+    extractable: boolean,
+    usages: Array<"sign" | "verify">,
+  ): Promise<WebCryptoKey>;
+  sign(algorithm: string, key: WebCryptoKey, data: ArrayBuffer): Promise<ArrayBuffer>;
+  verify(algorithm: string, key: WebCryptoKey, signature: ArrayBuffer, data: ArrayBuffer): Promise<boolean>;
+}
+
 export interface WebCryptoLike {
-  subtle: SubtleCrypto;
+  subtle: WebCryptoSubtle;
 }
 
 function bufferSource(bytes: Uint8Array): ArrayBuffer {

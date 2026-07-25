@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 import {
+  appendSignatureBlock,
   canonicalizePolicyObject,
 } from "../dist/index.js";
 
@@ -34,7 +35,7 @@ const privateKey = createPrivateKey({
 function signPolicy(markdown) {
   const unsigned = markdown.replace(/\n## signature[\s\S]*$/i, "").trimEnd();
   const signature = sign(null, Buffer.from(unsigned, "utf8"), privateKey).toString("base64url");
-  return `${unsigned}\n\n## signature\nsigil-sig: ${signature}`;
+  return appendSignatureBlock(unsigned, signature);
 }
 
 function parseWithSign(markdown) {

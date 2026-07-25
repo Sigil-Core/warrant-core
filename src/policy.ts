@@ -7,6 +7,21 @@ const KNOWN_SECTIONS = new Set(["evm", "tool_calls", "custom", "mcp", "soft_limi
 const RESOURCE_SECTIONS = new Set(["repository", "filesystem", "git", "database"]);
 const ACTION_PATTERN = (value: string) => Boolean(value) && (!value.includes("*") || (value.endsWith("*") && value.indexOf("*") === value.length - 1));
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+const FILESYSTEM_EFFECTS = new Set(["read", "create", "overwrite", "append", "truncate", "delete", "rename", "copy", "hard_link", "symlink", "chmod", "chown", "xattr", "execute", "egress"]);
+const GIT_OPERATIONS = new Set(["status", "diff", "log", "add", "commit", "fetch", "pull_ff_only", "push_fast_forward", "create_branch", "create_tag", "reset_hard", "clean", "rewrite_history", "delete_ref", "force_push", "mirror_push", "prune_remote", "change_remote", "change_protection", "change_credentials", "delete_repository"]);
+const DATABASE_OPERATIONS = new Set(["select", "insert", "update", "merge", "delete", "truncate", "create_table", "drop_table", "add_column", "drop_column", "alter_column_type", "add_constraint", "drop_constraint", "create_index", "drop_index", "create_schema", "drop_schema", "create_database", "alter_database", "drop_database", "create_routine", "replace_routine", "execute_routine", "change_trigger", "change_row_security", "grant", "revoke", "create_extension"]);
+const RESOURCE_ENUMS: Record<string, Set<string>> = {
+  "repository.gitProviders": new Set(["generic", "github", "gitlab", "bitbucket"]),
+  "filesystem.allowedEffects": FILESYSTEM_EFFECTS,
+  "filesystem.protectedEffects": FILESYSTEM_EFFECTS,
+  "git.providers": new Set(["generic", "github", "gitlab", "bitbucket"]),
+  "git.allowedRemoteSchemes": new Set(["https", "ssh"]),
+  "git.allowedOperations": GIT_OPERATIONS,
+  "git.requireApproval": GIT_OPERATIONS,
+  "git.blockedOperations": GIT_OPERATIONS,
+  "database.allowedOperations": DATABASE_OPERATIONS,
+  "database.requireApproval": DATABASE_OPERATIONS,
+};
 
 const RESOURCE_CONFIG: Record<string, { required: string[]; keys: Record<string, string> }> = {
   repository: {
@@ -99,6 +114,10 @@ function list(value: string): string[] {
   return value.split(",").map((entry) => unquote(entry.trim())).filter(Boolean);
 }
 
+function resourceList(value: string): string[] {
+  return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
 function unquote(value: string): string {
   return (value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")) ? value.slice(1, -1) : value;
 }
@@ -166,7 +185,7 @@ function parseEvm(lines: string[], isV2: boolean): Record<string, unknown> {
       result.maxTransactionEth = parsed;
     }
     else if (key === "allowed_actions") result.allowedActions = list(value);
-    else if (key === "allowed_chains") result.allowedChains = list(value).map(integer).filter((entry): entry is number => entry !== undefined);
+    else if (key === "allowed_chains") result.allowedChains = list(value).map(integer).filter((entry): entry is number => entry !== undefined && entry > 0);
     else if (key === "consensus_threshold_eth") result.consensusThresholdEth = number(value);
     else if (key === "consensus_require_hold") result.requireHold = boolean(value, key, isV2);
     else throw new Error(`Unrecognized EVM policy key: ${key}`);
@@ -262,6 +281,7 @@ function parseMcp(lines: string[], isV2: boolean): Record<string, unknown> {
 }
 
 function actionList(value: string, key: string): string[] { const values = list(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
+function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 
 function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown> {
   const result: Record<string, unknown> = {}; const caps: Record<string, Record<string, unknown>> = {}; const genericControls = new Set<string>();
@@ -312,13 +332,32 @@ function parseResource(name: string, lines: string[]): Record<string, unknown> {
     const outputKey = config.keys[key]; if (!outputKey) throw new Error(`Unrecognized ${name} policy key: ${key}`);
     if (["requireShim", "blockOutsideWrites", "protectGitHistory", "protectSensitiveFiles", "requireReadOnlyForSelect", "denyUnreviewedIndirectEffects"].includes(outputKey)) result[outputKey] = boolean(value, key, true);
     else if (outputKey.startsWith("max") || outputKey.endsWith("TimeoutMs")) { if (!positiveInt(value)) throw new Error(`${key} must be a positive integer`); result[outputKey] = Number(value); }
-    else if (["actions", "filesystemActions", "blockedPaths", "allowedResources", "protectedRefs"].includes(outputKey)) result[outputKey] = actionList(value, key);
-    else if (outputKey === "roots") { const roots = list(value); if (!roots.length || roots.some((root) => !isCanonicalRoot(root))) throw new Error(`${key} must contain . or canonical absolute paths`); result[outputKey] = roots; }
-    else if (outputKey === "routineCatalog") result[outputKey] = required(unquote(value), key);
-    else result[outputKey] = list(value);
+    else if (["actions", "filesystemActions", "blockedPaths", "allowedResources", "protectedRefs"].includes(outputKey)) result[outputKey] = resourceActionList(value, key);
+    else if (["roots", "writeRoots", "readRoots"].includes(outputKey)) { const roots = resourceList(value); if (!roots.length || roots.some((root) => !isCanonicalRoot(root))) throw new Error(`${key} must contain . or canonical absolute paths`); result[outputKey] = roots; }
+    else if (outputKey === "routineCatalog" || outputKey === "protectedClassCatalog") result[outputKey] = required(value.trim(), key);
+    else {
+      const values = resourceList(value);
+      const allowed = RESOURCE_ENUMS[`${name}.${outputKey}`];
+      if (allowed && values.some((entry) => !allowed.has(entry))) throw new Error(`${key} contains an unsupported value`);
+      result[outputKey] = values;
+    }
   }
   for (const requiredKey of config.required) if (!(requiredKey in result)) throw new Error(`## ${name} requires ${requiredKey}`);
+  for (const requiredKey of config.required) {
+    const value = result[requiredKey];
+    if (Array.isArray(value) && value.length === 0) throw new Error(`${requiredKey} must contain at least one entry`);
+  }
   if (result.requireShim !== true) throw new Error(`## ${name} requires requireShim: true`);
+  if (name === "git" || name === "database") {
+    const allowed = result.allowedOperations as string[];
+    const approval = result.requireApproval as string[] | undefined;
+    if (approval?.some((operation) => !allowed.includes(operation))) {
+      throw new Error("require_approval must be a subset of allowed_operations");
+    }
+  }
+  if (name === "database" && (result.allowedResources as string[]).includes("*")) {
+    throw new Error("allowed_resources cannot contain bare *");
+  }
   return result;
 }
 

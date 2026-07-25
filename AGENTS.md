@@ -34,7 +34,10 @@ Run these commands before handoff when package source changes:
 ```sh
 npm ci
 npm run typecheck
-npm test
+npm run test:node
+npx playwright install chromium
+npm run test:browser
+npm run test:workers
 npm run build
 npm pack --json
 ```

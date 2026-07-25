@@ -12,6 +12,9 @@
 - `src/`: parsing, canonicalization, commitments, signature handling, types, and runtime adapters.
 - `test/`: golden vectors and tri-runtime parity tests.
 - `scripts/verify-sigil-sign-parity.mjs`: local differential gate against the pinned Sigil Sign parser build.
+- `vitest.config.ts`: Node runtime test configuration.
+- `vitest.browser.config.ts`: Chromium browser-runtime test configuration.
+- `vitest.workers.config.ts`: Cloudflare `workerd` test configuration.
 - `.github/workflows/ci.yml`: CI contract for Node 22 and Node 24.
 - `.github/workflows/publish.yml`: npm OIDC trusted-publishing release gate.
 
