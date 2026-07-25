@@ -95,7 +95,27 @@ function sectionsOf(markdown: string): Section[] {
 function parseVersion(markdown: string): string {
   const firstSection = markdown.search(/^##\s+/m);
   const root = firstSection < 0 ? markdown : markdown.slice(0, firstSection);
-  const values = root.split("\n").filter((line) => !line.trim().startsWith("#")).map((line) => line.match(/^version:\s*(.+)$/i)?.[1]?.trim()).filter((value): value is string => value !== undefined);
+  const withoutHtmlComments = root.replace(/<!--[\s\S]*?-->/g, "");
+  if (withoutHtmlComments.includes("<!--") || withoutHtmlComments.includes("-->")) {
+    throw new Error("Unterminated HTML comment before the first policy block");
+  }
+  const values: string[] = [];
+  for (const line of withoutHtmlComments.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = line.match(/^\s*version:\s*(.+)$/i);
+    if (match) {
+      values.push(match[1]!.trim());
+      continue;
+    }
+    const unquotedMarkdown = trimmed.replace(/^(?:[-*+>]\s*)+/, "");
+    if (/^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)) {
+      throw new Error(`Invalid root version declaration: ${trimmed}`);
+    }
+    if (/^\s*[A-Za-z_][\w-]*\s*:/.test(line)) {
+      throw new Error(`Unrecognized root policy field: ${trimmed}`);
+    }
+  }
   if (values.length > 1) throw new Error("Duplicate version fields are not allowed");
   const version = values[0] ?? "0.0.0";
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid policy version "${version}"; expected semver X.Y.Z`);

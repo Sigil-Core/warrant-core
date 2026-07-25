@@ -84,9 +84,22 @@ describe("warranty.md parser", () => {
   it("accepts unversioned and 1.x policy forms, but rejects 2.x-only syntax", () => {
     expect(parsePolicyMarkdown("## tool_calls\nallowed: bash").version).toBe("0.0.0");
     expect(parsePolicyMarkdown("version: 1.8.4\n\n## tool_calls\nallowed: bash").version).toBe("1.8.4");
+    expect(parsePolicyMarkdown("  version: 2.0.0\n\n## tool_calls\nallowed: bash").version).toBe("2.0.0");
     expect(() => parsePolicyMarkdown("## tool_calls\nhttp.allowed_methods: GET")).toThrow("requires version 2.0.0");
     expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## unexpected\nkey: value")).toThrow("Unknown policy block");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## filesystem\nactions: read\nwrite_roots: .\nread_roots: .\nallowed_effects: read\nrequire_shim: true")).toThrow("2.1 resource profiles");
+  });
+
+  it("fails closed instead of downgrading malformed root version declarations", () => {
+    const permissiveLegacyBody = "\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe";
+    expect(() => parsePolicyMarkdown(`versoin: 2.0.0${permissiveLegacyBody}`)).toThrow("Unrecognized root policy field");
+    for (const declaration of ["version:", "version : 2.0.0", "version=2.0.0", "version", "- version: 2.0.0", "> version: 2.0.0"]) {
+      expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Invalid root version declaration");
+    }
+    expect(() => parsePolicyMarkdown(`version: 2.0.0\nversion: 2.0.0${permissiveLegacyBody}`)).toThrow("Duplicate version");
+    expect(parsePolicyMarkdown(`# Warranty Policy\n> This policy description is documentation.\n<!--\npolicy metadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
+    expect(parsePolicyMarkdown(permissiveLegacyBody).tool_calls?.emailRequireApproval).toBe(false);
+    expect(() => parsePolicyMarkdown(`version: 2.0.0${permissiveLegacyBody}`)).toThrow("must be true or false");
   });
 
   it("supports 2.1 resource profiles and blocked MCP exceptions", () => {
