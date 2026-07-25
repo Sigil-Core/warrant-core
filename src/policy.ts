@@ -118,7 +118,7 @@ function parseVersion(markdown: string): string {
     if (/^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)) {
       throw new Error(`Invalid root version declaration: ${trimmed}`);
     }
-    if (/^\s*[A-Za-z_][\w-]*\s*:/.test(line)) {
+    if (/^\s*(?:ver[\w-]*|[\w-]*sion)\s*:/i.test(line)) {
       throw new Error(`Unrecognized root policy field: ${trimmed}`);
     }
   }

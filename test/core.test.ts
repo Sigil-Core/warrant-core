@@ -97,7 +97,8 @@ describe("warranty.md parser", () => {
       expect(() => parsePolicyMarkdown(`${declaration}${permissiveLegacyBody}`)).toThrow("Invalid root version declaration");
     }
     expect(() => parsePolicyMarkdown(`version: 2.0.0\nversion: 2.0.0${permissiveLegacyBody}`)).toThrow("Duplicate version");
-    expect(parsePolicyMarkdown(`# Warranty Policy\n> This policy description is documentation.\n<!--\n## notes\npolicy metadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
+    expect(() => parsePolicyMarkdown(`version: 2.0${permissiveLegacyBody}`)).toThrow("Invalid policy version");
+    expect(parsePolicyMarkdown(`# Warranty Policy\nNote: copy this policy before use.\n> This policy description is documentation.\n<!--\n## notes\npolicy metadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
     expect(parsePolicyMarkdown(permissiveLegacyBody).tool_calls?.emailRequireApproval).toBe(false);
     expect(() => parsePolicyMarkdown(`version: 2.0.0${permissiveLegacyBody}`)).toThrow("must be true or false");
   });
