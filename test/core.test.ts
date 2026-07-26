@@ -14,6 +14,7 @@ import {
 import { createWebCryptoAdapter } from "../src/crypto/browser.js";
 import { createNodeCryptoAdapter } from "../src/crypto/node.js";
 import { createWebCryptoAdapter as createWorkerCryptoAdapter } from "../src/crypto/workers.js";
+import { assertKnownParityDivergencesCovered, KNOWN_PARITY_DIVERGENCES } from "./shared/parser-compatibility.js";
 
 interface Fixture {
   templateBody: string;
@@ -325,12 +326,15 @@ describe("warranty.md parser", () => {
     }
   });
 
-  it("preserves deployed token-decimal prefix parsing and omission semantics", () => {
-    const markdown = (decimals: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: ${decimals}`;
-    expect(parsePolicyMarkdown(markdown("6units")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 6 } });
-    expect(parsePolicyMarkdown(markdown("nope")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100" } });
-    expect(parsePolicyMarkdown(markdown("-1")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: -1 } });
-    expect(parsePolicyMarkdown(markdown("37")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 37 } });
+  it("rejects malformed and out-of-range token decimals in every policy version", () => {
+    for (const version of ["1.0.0", "2.0.0", "2.1.0"]) {
+      const markdown = (decimals: string) => `version: ${version}\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: ${decimals}`;
+      expect(parsePolicyMarkdown(markdown("0")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 0 } });
+      expect(parsePolicyMarkdown(markdown("36")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 36 } });
+      for (const decimals of ["6units", "nope", "-1", "37", "1.5"]) {
+        expect(() => parsePolicyMarkdown(markdown(decimals))).toThrow("token.USDC.decimals must be an integer from 0 through 36");
+      }
+    }
   });
 
   it("rejects policy headings with Markdown indentation instead of omitting their controls", () => {
@@ -365,14 +369,18 @@ describe("warranty.md parser", () => {
     });
   });
 
-  it("preserves deployed numeric-prefix parsing and omission semantics for consensus thresholds", () => {
+  it("preserves numeric-prefix parsing and rejects nonnumeric consensus thresholds", () => {
     const markdown = (threshold: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: ${threshold}`;
     expect(parsePolicyMarkdown(markdown("1.5ETH")).evm?.consensusThresholdEth).toBe(1.5);
-    expect(parsePolicyMarkdown(markdown("nope")).evm).not.toHaveProperty("consensusThresholdEth");
+    expect(() => parsePolicyMarkdown(markdown("nope"))).toThrow("consensus_threshold_eth must be numeric");
+    for (const threshold of ["0", "-1"]) {
+      expect(() => parsePolicyMarkdown(markdown(threshold))).toThrow("consensus_threshold_eth must be greater than zero");
+    }
   });
 
+  assertKnownParityDivergencesCovered();
   for (const parityCase of sigilSignParity.cases) {
-    if (["tool-controls-without-allowed-list", "consensus-threshold-nonnumeric", "token-decimals-nonnumeric", "token-decimals-negative", "token-decimals-above-maximum", "legacy-invalid-daily-tool-limit", "legacy-invalid-daily-evm-limit"].includes(parityCase.id)) continue;
+    if (KNOWN_PARITY_DIVERGENCES.has(parityCase.id)) continue;
     it(`matches frozen Sigil Sign parser behavior for ${parityCase.id}`, () => {
       if (parityCase.outcome === "accept") {
         if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);
@@ -386,7 +394,8 @@ describe("warranty.md parser", () => {
   it("fails closed for malformed or legacy generic approval and shim controls", () => {
     expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nrequire_approval: bash")).toThrow("requires version 2.0.0");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nrequire_shim: yes")).toThrow("must be true or false");
-    expect(parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern* ").custom?.requireApproval).toEqual(["bad*pattern*"]);
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern* ")).toThrow("must contain exact values or one trailing * wildcard");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bash, bash").custom?.requireApproval).toEqual(["bash"]);
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\nrequire_shim: true\nrequire_shim: false")).toThrow("Duplicate soft_limits policy key");
   });
 
@@ -491,14 +500,18 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown('version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: "1"')).toThrow("positive decimal");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: '1'")).toThrow("positive decimal");
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
-    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001").soft_limits?.dailyEvmLimitEth).toBe(9_000_000_000_000);
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001")).toThrow("positive decimal");
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775807").soft_limits?.dailyEvmLimitEth).toBe(Number("9223372036854.775807"));
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775808")).toThrow("positive decimal");
-    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope").soft_limits).toBeUndefined();
-    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope").soft_limits).toBeUndefined();
+    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope")).toThrow("daily_tool_calls must be a positive integer");
+    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope")).toThrow("daily_evm_limit_eth must be a positive decimal");
+    for (const version of ["1.0.0", "2.0.0", "2.1.0"]) {
+      expect(() => parsePolicyMarkdown(`version: ${version}\n\n## soft_limits\ndaily_evm_limit_eth: 1e-1`)).toThrow("positive decimal");
+      expect(() => parsePolicyMarkdown(`version: ${version}\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001`)).toThrow("positive decimal");
+    }
     expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: 1calls").soft_limits?.dailyToolCalls).toBe(1);
     expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
-    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001").soft_limits?.dailyEvmLimitEth).toBe(1.0000001);
+    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001")).toThrow("positive decimal");
     const inheritedCapPolicy = parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ncap.toString.max_count: 1\ncap.toString.window: day\ncap.toString.action: email.send");
     const inheritedCaps = inheritedCapPolicy.soft_limits?.caps as Record<string, Record<string, unknown>>;
     expect(Object.getPrototypeOf(inheritedCaps)).toBeNull();

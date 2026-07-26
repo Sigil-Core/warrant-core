@@ -66,7 +66,7 @@ const ROOT_POLICY_KEYS = new Set([
 
 const ROOT_POLICY_SYNTAX = [
   /^token\.[A-Za-z0-9_]+\.(?:max_transaction|consensus_threshold|decimals|addresses)\s*:/,
-  /^cap\.[A-Za-z0-9_-]+\.(?:max_count|max_sum_usd|window|action|group_by|amount_field)\s*:/,
+  /^cap\.[A-Za-z0-9_-]+\.(?:max_count|max_sum_usd|window|action|group_by|amount_field|window_days|window_hours|timezone)\s*:/,
   /^allow_only(?:\[action=[^\]]*\])?\.[^\s:]+(?:\s+attested)?(?:\s+(?:contains|starts_with|prefix|ends_with|matches|equals))?\s*:/,
   /^deny_if\.\S+\s+(?:contains|starts_with|ends_with|matches|equals|not_equals)\s+.+$/,
 ];
@@ -213,7 +213,8 @@ function unquote(value: string): string {
 function boolean(value: string, key: string, strict: boolean): boolean {
   const normalized = value.trim().toLowerCase();
   if (strict && normalized !== "true" && normalized !== "false") throw new Error(`${key} must be true or false`);
-  return strict ? normalized === "true" : value.trim() === "true";
+  // Policy 1.x follows the frozen Sigil Sign parser: boolean tokens are case-insensitive.
+  return normalized === "true";
 }
 
 function number(value: string): number | undefined {
@@ -336,8 +337,11 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
       tokenFields.add(tokenField);
       const profile = tokens[symbol] ??= {};
       if (token[2] === "decimals") {
-        const parsed = integer(token[3]!);
-        if (parsed !== undefined) profile.decimals = parsed;
+        const rawDecimals = token[3]!.trim();
+        if (!/^\d+$/.test(rawDecimals)) throw new Error(`token.${symbol}.decimals must be an integer from 0 through 36`);
+        const parsed = Number(rawDecimals);
+        if (!Number.isSafeInteger(parsed) || parsed > 36) throw new Error(`token.${symbol}.decimals must be an integer from 0 through 36`);
+        profile.decimals = parsed;
       }
       else if (token[2] === "addresses") profile.addresses = [...new Set([...(profile.addresses as string[] ?? []), ...list(token[3]!).map((entry) => entry.toLowerCase())])];
       else if (token[2] === "max_transaction") profile.maxTransaction = token[3]!.trim();
@@ -350,14 +354,16 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
     ordinaryKeys.add(key);
     if (key === "max_transaction_eth") {
       const parsed = number(value);
-      if (parsed === undefined || parsed <= 0) delete result.maxTransactionEth;
-      else result.maxTransactionEth = parsed;
+      if (parsed === undefined || parsed <= 0) throw new Error("max_transaction_eth must be greater than zero");
+      result.maxTransactionEth = parsed;
     }
     else if (key === "allowed_actions") result.allowedActions = list(value);
     else if (key === "allowed_chains") result.allowedChains = list(value).map(integer).filter((entry): entry is number => entry !== undefined && entry > 0);
     else if (key === "consensus_threshold_eth") {
       const parsed = number(value);
-      if (parsed !== undefined) result.consensusThresholdEth = parsed;
+      if (parsed === undefined) throw new Error("consensus_threshold_eth must be numeric");
+      if (parsed <= 0) throw new Error("consensus_threshold_eth must be greater than zero");
+      result.consensusThresholdEth = parsed;
     }
     else if (key === "consensus_require_hold") result.requireHold = boolean(value, key, isV2);
     else throw new Error(`Unrecognized EVM policy key: ${key}`);
@@ -415,6 +421,7 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
       if (!isV2 && (allow[1] || allow[3] || allow[4])) throw new Error("Policy syntax requires version 2.0.0");
       const actionScope = allow[1]?.trim(); if (actionScope === "") throw new Error("allow_only action scope must not be empty");
       const fieldPath = stripIntent(allow[2]!); const operator = allow[4] === "prefix" ? "starts_with" : (allow[4] ?? "equals"); const rawValues = allow[5]!.trim();
+      // In 0.1.1, comma-containing regexes retain Sigil Sign Policy 1.x split semantics; changing this requires a coordinated compatibility-breaking parser/canonicalization release across Sign and consumers.
       const values = list(rawValues);
       if (!fieldPath) throw new Error("allow_only field path must not be empty");
       if (!values.length) throw new Error(`allow_only.${fieldPath} must contain at least one value`);
@@ -507,19 +514,15 @@ function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown
     if (parseGenericControl(result, key, value, isV2)) continue;
     if (key === "daily_tool_calls") {
       const parsed = integer(value);
-      if (isV2 && !positiveInt(value)) throw new Error("daily_tool_calls must be a positive integer");
-      if (parsed !== undefined) {
-        result.dailyToolCalls = parsed;
-        hasLimit = true;
-      }
+      if (parsed === undefined || parsed <= 0 || (isV2 && !positiveInt(value))) throw new Error("daily_tool_calls must be a positive integer");
+      result.dailyToolCalls = parsed;
+      hasLimit = true;
     }
     else if (key === "daily_evm_limit_eth") {
-      const parsed = isV2 ? dailyEvmLimit(value) : number(value);
-      if (isV2 && (parsed === undefined || parsed <= 0)) throw new Error("daily_evm_limit_eth must be a positive decimal with at most 6 places");
-      if (parsed !== undefined) {
-        result.dailyEvmLimitEth = parsed;
-        hasLimit = true;
-      }
+      const parsed = dailyEvmLimit(value);
+      if (parsed === undefined || parsed <= 0) throw new Error("daily_evm_limit_eth must be a positive decimal with at most 6 places");
+      result.dailyEvmLimitEth = parsed;
+      hasLimit = true;
     }
     else throw new Error(`Unrecognized soft_limits policy key: ${key}`);
   }
@@ -605,7 +608,8 @@ function stripIntent(path: string): string { return path.startsWith("intent.") ?
 function requiredActionList(value: string, key: string): string[] {
   const values = value.split(",").map((entry) => unquote(entry.trim()).trim());
   if (values.some((entry) => !entry)) throw new Error(`${key} must not contain empty actions`);
-  return values;
+  if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`);
+  return [...new Set(values)];
 }
 function parseGenericControl(result: Record<string, unknown>, key: string, value: string, isV2: boolean, seen?: Set<string>): boolean {
   if (key !== "require_approval" && key !== "require_shim") return false;
@@ -622,38 +626,14 @@ function isCanonicalRoot(value: string): boolean {
 function positiveInt(value: string): boolean { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; }
 function dailyEvmLimit(value: string): number | undefined {
   const raw = value.trim();
-  const prefix = raw.match(/^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?/);
+  const prefix = raw.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?/);
   if (!prefix) return undefined;
-  const whole = prefix[1] ?? "0";
-  const fraction = prefix[2] ?? prefix[3] ?? "";
-  const coefficient = BigInt(`${whole}${fraction}`);
-  if (coefficient <= 0n) return undefined;
-  const exponent = Number(prefix[4] ?? "0");
-  if (!Number.isSafeInteger(exponent)) {
-    if (!prefix[4]?.startsWith("-")) return undefined;
-  } else {
-    const microsScale = exponent - fraction.length + 6;
-    const coefficientDigits = coefficient.toString();
-    const maximumDigits = MAX_COUNTER_MICROS.toString();
-    if (microsScale >= 0) {
-      const scaledLength = coefficientDigits.length + microsScale;
-      if (scaledLength > maximumDigits.length) return undefined;
-      if (scaledLength === maximumDigits.length && `${coefficientDigits}${"0".repeat(microsScale)}` > maximumDigits) return undefined;
-    } else {
-      const divisorPlaces = -microsScale;
-      const maximumScaledLength = maximumDigits.length + divisorPlaces;
-      if (coefficientDigits.length > maximumScaledLength) return undefined;
-      if (coefficientDigits.length === maximumScaledLength) {
-        const leadingDigits = coefficientDigits.slice(0, maximumDigits.length);
-        if (leadingDigits > maximumDigits) return undefined;
-        if (leadingDigits === maximumDigits && /[1-9]/.test(coefficientDigits.slice(maximumDigits.length))) return undefined;
-      }
-    }
-  }
-  const parsed = number(value);
-  if (parsed === undefined || parsed <= 0) return undefined;
-  const normalized = String(parsed);
-  if (!/^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(normalized)) return undefined;
+  const suffix = raw.slice(prefix[0].length);
+  if (/^[\d.+-]/.test(suffix) || /^[eE][+-]?\d/.test(suffix)) return undefined;
+  const micros = BigInt(prefix[1]!) * 1_000_000n + BigInt((prefix[2] ?? "").padEnd(6, "0"));
+  if (micros < 1n || micros > MAX_COUNTER_MICROS) return undefined;
+  const parsed = Number(prefix[0]);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
   return parsed;
 }
 function positiveDecimal(value: string): boolean {

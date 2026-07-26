@@ -279,7 +279,24 @@
       "outcome": "accept",
       "canonicalPolicy": {
         "version": "1.0.0",
-        "tool_calls": { "emailRequireApproval": false }
+        "tool_calls": { "emailRequireApproval": true }
+      }
+    },
+    {
+      "id": "generic-approval-malformed-selector",
+      "markdown": "version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern*",
+      "outcome": "reject"
+    },
+    {
+      "id": "generic-approval-deduplicates-selectors",
+      "markdown": "version: 2.0.0\n\n## custom\nrequire_approval: bash, bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [],
+          "requireApproval": ["bash"]
+        }
       }
     }
   ]

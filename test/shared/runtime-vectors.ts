@@ -21,6 +21,11 @@ import parserHardeningFixture from "../vectors/parser-hardening.json";
 import policyFixture from "../vectors/policy-fixtures.json";
 import sigilSignParserParityFixture from "../vectors/sigil-sign-parser-parity.json";
 import signatureFixture from "../vectors/signature-blocks.json";
+import {
+  assertKnownParityDivergencesCovered,
+  defineConsumerCompatibilityVectorTests,
+  KNOWN_PARITY_DIVERGENCES,
+} from "./parser-compatibility.js";
 
 function bytesFromBase64url(value: string): Uint8Array {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
@@ -54,6 +59,8 @@ export function pgCommitRejectionValue(kind: string): unknown {
 }
 
 export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoAdapter): void {
+  defineConsumerCompatibilityVectorTests(runtime);
+
   it(`preserves established Warrant collation in ${runtime}`, () => {
     const policy = {
       chainActions: {
@@ -130,10 +137,14 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
   it(`validates version 2 daily EVM decimals before number conversion in ${runtime}`, () => {
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
     expect(() => parsePolicyMarkdown('version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: "1"')).toThrow("positive decimal");
-    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001").soft_limits?.dailyEvmLimitEth).toBe(9_000_000_000_000);
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001")).toThrow("positive decimal");
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775807").soft_limits?.dailyEvmLimitEth).toBe(Number("9223372036854.775807"));
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775808")).toThrow("positive decimal");
     expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
+    for (const version of ["1.0.0", "2.0.0", "2.1.0"]) {
+      expect(() => parsePolicyMarkdown(`version: ${version}\n\n## soft_limits\ndaily_evm_limit_eth: 1e-1`)).toThrow("positive decimal");
+      expect(() => parsePolicyMarkdown(`version: ${version}\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001`)).toThrow("positive decimal");
+    }
   });
 
   it(`matches generic approval and shim controls in ${runtime}`, () => {
@@ -163,8 +174,9 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
       });
     }
 
+    assertKnownParityDivergencesCovered();
     for (const parityCase of sigilSignParserParityFixture.cases) {
-      if (["tool-controls-without-allowed-list", "consensus-threshold-nonnumeric", "token-decimals-nonnumeric", "token-decimals-negative", "token-decimals-above-maximum", "legacy-invalid-daily-tool-limit", "legacy-invalid-daily-evm-limit"].includes(parityCase.id)) continue;
+      if (KNOWN_PARITY_DIVERGENCES.has(parityCase.id)) continue;
       it(`matches the ${parityCase.id} Sigil Sign parser vector`, () => {
         if (parityCase.outcome === "accept") {
           if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);
