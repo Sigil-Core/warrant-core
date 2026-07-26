@@ -190,6 +190,43 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown(`version: 2.0.0${permissiveLegacyBody}`)).toThrow("must be true or false");
   });
 
+  it("rejects policy controls and security fields placed at document root", () => {
+    const validBlock = "\n\n## tool_calls\nallowed: bash";
+    for (const field of [
+      "require_approval: bash",
+      "require_shim: true",
+      "max_tool_calls_per_task: 1",
+      "blocked_operations: force_push",
+      "protect_git_history: true",
+      "token.USDC.decimals: 6",
+      "cap.requests.max_count: 1",
+      "deny_string: SECRET",
+      "allow_only.intent.environment: production",
+      "deny_if.intent.environment equals production",
+    ]) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n${field}${validBlock}`)).toThrow("must be inside a policy block");
+    }
+  });
+
+  it("keeps legitimate root prose, headings, comments, and blockquotes", () => {
+    const policy = [
+      "# Warrant policy",
+      "   # Indented documentation heading",
+      "  This indented prose remains documentation.",
+      "Versioning: draft",
+      "Session: current",
+      "Note: require_shim belongs in a policy block.",
+      "# require_shim: true",
+      "> require_approval: bash",
+      "<!-- require_shim: true -->",
+      "version: 2.0.0",
+      "",
+      "## tool_calls",
+      "allowed: bash",
+    ].join("\n");
+    expect(parsePolicyMarkdown(policy)).toEqual({ version: "2.0.0", tool_calls: { allowed: ["bash"] } });
+  });
+
   it("supports 2.1 resource profiles and blocked MCP exceptions", () => {
     const profile = parsePolicyMarkdown("version: 2.1.0\n\n## repository\nroots: .\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: github\nrequire_shim: true\n\n## mcp\nallowed_tools: github.*\nblocked_tools: github.delete");
     expect(profile.repository).toMatchObject({ roots: ["."], requireShim: true });
@@ -202,6 +239,20 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: relative\nread_roots: .\nallowed_effects: overwrite\nrequire_shim: true")).toThrow("canonical absolute paths");
     expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## git\nactions: git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https\nallowed_operations: status\nrequire_approval: force_push\nblocked_operations: force_push\nprotected_refs: refs/heads/main\nrequire_shim: true")).toThrow("subset of allowed_operations");
     expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nallowed_resources: *\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true")).toThrow("bare *");
+  });
+
+  it("rejects every present empty optional Policy 2.1 resource list", () => {
+    const filesystem = "version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: /workspace\nread_roots: /workspace\nallowed_effects: overwrite\nrequire_shim: true";
+    for (const field of ["blocked_paths", "protected_file_classes", "protected_effects"]) {
+      expect(() => parsePolicyMarkdown(`${filesystem}\n${field}: ,`)).toThrow("must contain at least one entry");
+    }
+    expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: /workspace\nallowed_effects: overwrite\nprotected_file_classes: ,\nrequire_shim: true")).toThrow("must contain at least one entry");
+
+    const git = "version: 2.1.0\n\n## git\nactions: git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https\nallowed_operations: push_fast_forward\nblocked_operations: force_push\nprotected_refs: refs/heads/main\nrequire_shim: true";
+    expect(() => parsePolicyMarkdown(`${git}\nrequire_approval: ,`)).toThrow("must contain at least one entry");
+
+    const database = "version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nallowed_resources: public.*\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true";
+    expect(() => parsePolicyMarkdown(`${database}\nrequire_approval: ,`)).toThrow("must contain at least one entry");
   });
 
   it("matches Sigil Sign generic approval and shim control output across typed blocks", () => {
@@ -287,6 +338,7 @@ describe("warranty.md parser", () => {
       const markdown = `version: 2.0.0\n\n${indent}## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\n## tool_calls\nallowed: bash`;
       expect(() => parsePolicyMarkdown(markdown)).toThrow("Indented policy headings are not supported");
     }
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n ## execution_limits\nmax_tool_calls_per_task: 1\n\n## tool_calls\nallowed: bash")).toThrow("Indented policy headings are not supported");
   });
 
   it("rejects duplicate ordinary EVM declarations", () => {

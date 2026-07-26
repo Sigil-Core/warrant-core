@@ -106,6 +106,54 @@
           "requireShim": true
         }
       }
+    },
+    {
+      "id": "root-generic-approval-control",
+      "markdown": "version: 2.0.0\nrequire_approval: bash\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-execution-limits-heading-in-root-preamble",
+      "markdown": "version: 2.0.0\n\n ## execution_limits\nmax_tool_calls_per_task: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "root-execution-limit-control",
+      "markdown": "version: 2.0.0\nmax_tool_calls_per_task: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "root-resource-security-control",
+      "markdown": "version: 2.0.0\nprotect_git_history: true\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "root-policy-looking-documentation",
+      "markdown": "# Warrant policy\nVersioning: draft\nSession: current\nNote: require_shim belongs in a policy block.\n# require_shim: true\n> require_approval: bash\n<!-- max_tool_calls_per_task: 1 -->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "policy-2-1-empty-filesystem-protected-classes",
+      "markdown": "version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: /workspace\nread_roots: /workspace\nallowed_effects: overwrite\nprotected_file_classes: ,\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2-1-empty-git-approval",
+      "markdown": "version: 2.1.0\n\n## git\nactions: git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https\nallowed_operations: push_fast_forward\nrequire_approval: ,\nblocked_operations: force_push\nprotected_refs: refs/heads/main\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2-1-empty-database-approval",
+      "markdown": "version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nrequire_approval: ,\nallowed_resources: public.*\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true",
+      "outcome": "reject"
     }
   ]
 }

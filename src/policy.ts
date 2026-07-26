@@ -45,9 +45,30 @@ const RESOURCE_CONFIG: Record<string, { required: string[]; keys: Record<string,
   }
 };
 
+const ROOT_POLICY_KEYS = new Set([
+  "require_approval", "require_shim",
+  "max_transaction_eth", "allowed_actions", "allowed_chains", "chain_actions", "consensus_threshold_eth", "consensus_require_hold",
+  "allowed", "bash.blocked_commands", "web_fetch.blocked_domains", "file_write.blocked_paths", "email.require_approval", "email.allowed_recipients", "email.blocked_recipients",
+  "http.allowed_methods", "http.allowed_hosts", "http.blocked_methods",
+  "deny_string", "allowed_servers", "allowed_tools", "blocked_tools",
+  "daily_tool_calls", "daily_evm_limit_eth",
+  "max_tool_calls_per_task", "max_tool_calls_per_hour", "max_model_spend_usd_per_task", "max_model_tokens_per_task",
+  ...Object.values(RESOURCE_CONFIG).flatMap((config) => Object.keys(config.keys)),
+]);
+
+const ROOT_POLICY_SYNTAX = [
+  /^token\.[A-Za-z0-9_]+\.(?:max_transaction|consensus_threshold|decimals|addresses)\s*:/,
+  /^cap\.[A-Za-z0-9_-]+\.(?:max_count|max_sum_usd|window|action|group_by|amount_field)\s*:/,
+  /^allow_only(?:\[action=[^\]]*\])?\.[^\s:]+(?:\s+attested)?(?:\s+(?:contains|starts_with|prefix|ends_with|matches|equals))?\s*:/,
+  /^deny_if\.\S+\s+(?:contains|starts_with|ends_with|matches|equals|not_equals)\s+.+$/,
+];
+
 export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
   const unsigned = splitSignatureBlock(markdown).unsigned;
   const structural = maskHtmlComments(unsigned);
+  if (/^ {1,3}##\s+\S.*$/m.test(structural)) {
+    throw new Error("Indented policy headings are not supported");
+  }
   const version = parseVersion(unsigned);
   const isV2 = version === "2.0.0" || version === "2.1.0";
   const sections = sectionsOf(structural);
@@ -142,6 +163,9 @@ function parseVersion(markdown: string): string {
       values.push(match[1]!.trim());
       continue;
     }
+    if (isRootPolicySyntax(trimmed)) {
+      throw new Error(`Policy field must be inside a policy block: ${trimmed}`);
+    }
     const unquotedMarkdown = trimmed.replace(/^(?:[-*+>]\s*)+/, "");
     if (
       /^version(?:\s*[:=]|\s*$|\s+\d)/i.test(unquotedMarkdown)
@@ -167,6 +191,12 @@ function parseVersion(markdown: string): string {
     throw new Error(`Policy version ${version} is not supported by this engine build`);
   }
   return version;
+}
+
+function isRootPolicySyntax(line: string): boolean {
+  const key = line.match(/^([A-Za-z_][\w.]*)\s*:/)?.[1];
+  return (key !== undefined && ROOT_POLICY_KEYS.has(key))
+    || ROOT_POLICY_SYNTAX.some((pattern) => pattern.test(line));
 }
 
 function cleanedLines(body: string): string[] {
@@ -449,7 +479,7 @@ function parseMcp(lines: string[], isV2: boolean): Record<string, unknown> {
 }
 
 function actionList(value: string, key: string): string[] { const values = list(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
-function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
+function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length) throw new Error(`${key} must contain at least one entry`); if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 
 function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown> {
   const result: Record<string, unknown> = {}; const caps = Object.create(null) as Record<string, Record<string, unknown>>; const genericControls = new Set<string>();
@@ -525,11 +555,10 @@ function parseResource(name: string, lines: string[]): Record<string, unknown> {
       result[outputKey] = values;
     }
   }
-  for (const requiredKey of config.required) if (!(requiredKey in result)) throw new Error(`## ${name} requires ${requiredKey}`);
-  for (const requiredKey of config.required) {
-    const value = result[requiredKey];
-    if (Array.isArray(value) && value.length === 0) throw new Error(`${requiredKey} must contain at least one entry`);
+  for (const [field, value] of Object.entries(result)) {
+    if (Array.isArray(value) && value.length === 0) throw new Error(`${field} must contain at least one entry`);
   }
+  for (const requiredKey of config.required) if (!(requiredKey in result)) throw new Error(`## ${name} requires ${requiredKey}`);
   if (result.requireShim !== true) throw new Error(`## ${name} requires requireShim: true`);
   if (name === "git" || name === "database") {
     const allowed = result.allowedOperations as string[];
