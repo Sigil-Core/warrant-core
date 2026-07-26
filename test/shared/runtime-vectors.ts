@@ -70,6 +70,18 @@ const defineSharedToolCallControlTests = (runtime: string): void => {
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nrequire_approval: bash").tool_calls).toEqual({ requireApproval: ["bash"] });
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nrequire_shim: true").tool_calls).toEqual({ requireShim: true });
   });
+
+  it(`rejects empty explicit Policy 2 tool-call allows in ${runtime}`, () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: ,")).toThrow("allowed must contain at least one tool");
+    expect(() => parsePolicyMarkdown('version: 2.0.0\n\n## tool_calls\nallowed: ""')).toThrow("allowed must contain at least one tool");
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: ,").tool_calls).toEqual({ allowed: [] });
+  });
+
+  it(`rejects a false-only Policy 2 email approval control in ${runtime}`, () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nemail.require_approval: false")).toThrow("at least one enforceable rule or control");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nemail.require_approval: true").tool_calls).toEqual({ emailRequireApproval: true });
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nemail.require_approval: false").tool_calls).toEqual({ emailRequireApproval: false });
+  });
 };
 
 const defineSharedPolicyFixtureTests = (adapter: CryptoAdapter): void => {

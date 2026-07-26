@@ -452,15 +452,23 @@ const parseToolCallValue = (result: Record<string, unknown>, key: string, value:
   if (!parser) throw new Error(`Unrecognized tool_calls policy key: ${key}`);
   parser(result, key, value, isV2);
 };
-const falseOnlyToolCallShim = (result: Record<string, unknown>): boolean =>
-  result.requireShim === false && Object.keys(result).length === 1;
+const hasEmptyAllowedToolCalls = (result: Record<string, unknown>): boolean =>
+  Array.isArray(result.allowed) && result.allowed.length === 0;
+const falseOnlyToolCallControl = (result: Record<string, unknown>, key: "requireShim" | "emailRequireApproval"): boolean =>
+  result[key] === false && Object.keys(result).length === 1;
+const validateV2ToolCalls = (result: Record<string, unknown>): void => {
+  if (hasEmptyAllowedToolCalls(result)) throw new Error("allowed must contain at least one tool under version 2.0.0");
+  if (falseOnlyToolCallControl(result, "requireShim") || falseOnlyToolCallControl(result, "emailRequireApproval")) {
+    throw new Error("## tool_calls must declare at least one enforceable rule or control");
+  }
+};
 const parseToolCalls = (lines: string[], isV2: boolean): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   for (const [key, value] of unique(lines, "tool_calls")) {
     if (parseGenericControl(result, key, value, isV2)) continue;
     parseToolCallValue(result, key, value, isV2);
   }
-  if (isV2 && falseOnlyToolCallShim(result)) throw new Error("## tool_calls must declare at least one enforceable rule or control");
+  if (isV2) validateV2ToolCalls(result);
   return result;
 };
 
