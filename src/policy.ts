@@ -515,16 +515,23 @@ const customAllowRequiresV2 = (parts: CustomAllowParts): boolean =>
 const validateCustomAllowVersion = (parts: CustomAllowParts, isV2: boolean): void => {
   if (!isV2 && customAllowRequiresV2(parts)) throw new Error("Policy syntax requires version 2.0.0");
 };
-const applyCustomAllow = (state: CustomParserState, parts: CustomAllowParts, isV2: boolean): void => {
-  const { rawScope, rawPath, rawAttested, rawOperator, rawValues } = parts;
-  validateCustomAllowVersion(parts, isV2);
+interface ResolvedCustomAllow {
+  actionScope: string | undefined;
+  fieldPath: string;
+  operator: string;
+}
+const resolveCustomAllow = ({ rawScope, rawPath, rawOperator }: CustomAllowParts): ResolvedCustomAllow => {
   const actionScope = rawScope?.trim();
   if (actionScope === "") throw new Error("allow_only action scope must not be empty");
   const fieldPath = stripIntent(rawPath);
   if (!fieldPath) throw new Error("allow_only field path must not be empty");
-  const operator = rawOperator === "prefix" ? "starts_with" : (rawOperator ?? "equals");
-  const values = customAllowValues(fieldPath, rawValues.trim());
-  const attested = rawAttested === "attested";
+  return { actionScope, fieldPath, operator: rawOperator === "prefix" ? "starts_with" : (rawOperator ?? "equals") };
+};
+const applyCustomAllow = (state: CustomParserState, parts: CustomAllowParts, isV2: boolean): void => {
+  validateCustomAllowVersion(parts, isV2);
+  const { actionScope, fieldPath, operator } = resolveCustomAllow(parts);
+  const values = customAllowValues(fieldPath, parts.rawValues.trim());
+  const attested = parts.rawAttested === "attested";
   const scope = `${actionScope ?? "<global>"}::${fieldPath}`;
   mergeCustomAllowRule(state, scope, operator, attested, fieldPath, customAllowRule(actionScope, fieldPath, operator, attested, values), values);
 };
@@ -569,13 +576,21 @@ const parseCustomLine = (state: CustomParserState, line: string, isV2: boolean):
   if (parseGenericControlLine(state.controls, line, isV2, state.genericControls)) return true;
   return parseCustomAllow(state, line, isV2) || parseCustomDeny(state.rules, line) || parseCustomDenyString(state.rules, line);
 };
+const hasEnforceableCustomRuleOrControl = (state: CustomParserState): boolean =>
+  state.rules.length > 0 || state.controls.requireApproval !== undefined || state.controls.requireShim === true;
+const rejectFalseOnlyCustom = (controls: Record<string, unknown>): void => {
+  if (controls.requireShim === false) throw new Error("## custom must declare at least one enforceable rule or control");
+};
+const customControlProperties = (controls: Record<string, unknown>): Record<string, unknown> => ({
+  ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}),
+  ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}),
+});
 const finalizeCustom = (state: CustomParserState): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined => {
-  const { rules, controls } = state;
-  if (!rules.length && controls.requireApproval === undefined && controls.requireShim !== true) {
-    if (controls.requireShim === false) throw new Error("## custom must declare at least one enforceable rule or control");
+  if (!hasEnforceableCustomRuleOrControl(state)) {
+    rejectFalseOnlyCustom(state.controls);
     return undefined;
   }
-  return { rules, ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}), ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}) };
+  return { rules: state.rules, ...customControlProperties(state.controls) };
 };
 const parseCustom = (lines: string[], isV2: boolean): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined => {
   const state: CustomParserState = { rules: [], controls: {}, genericControls: new Set<string>(), allows: new Map<string, Record<string, unknown>>(), operators: new Map<string, string>() };
