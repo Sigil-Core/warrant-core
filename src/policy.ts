@@ -412,7 +412,10 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
     if (string) { const value = unquote(string[1]!); rules.push({ name: `deny_string:${value}`, type: "deny_string", value }); continue; }
     throw new Error(`Unrecognized custom rule: ${line}`);
   }
-  if (!rules.length && controls.requireApproval === undefined && controls.requireShim === undefined) {
+  if (!rules.length && controls.requireApproval === undefined && controls.requireShim !== true) {
+    if (controls.requireShim === false) {
+      throw new Error("## custom must declare at least one enforceable rule or control");
+    }
     return undefined;
   }
   return { rules, ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}), ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}) };

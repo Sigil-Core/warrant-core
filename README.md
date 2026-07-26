@@ -30,7 +30,7 @@ import {
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, and incomplete Policy 2.1 resource profiles. |
+| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, and incomplete Policy 2.1 resource profiles. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |
@@ -51,9 +51,9 @@ The package intentionally exposes two distinct profiles. Their different sort ru
 
 Use `canonicalizePolicyObject` and `hashPolicy` for an existing Sigil Warrant `policyHash`.
 
-- Object keys use JavaScript's stable `localeCompare` ordering pinned to `en-US`
-  with variant sensitivity, lexical number handling, and locale-default case order. Collation-equal
-  keys retain their insertion order for compatibility with established hashes.
+- Object keys use `localeCompare` ordering pinned to `en-US` with variant sensitivity, lexical
+  number handling, and locale-default case order. Distinct keys that collate equally use ECMAScript
+  UTF-16 code-unit order as a deterministic tie-break, so insertion order cannot change policy bytes.
 - Array order stays unchanged.
 - Object properties with `undefined` values are omitted.
 - `null`, strings, booleans, and finite numbers serialize as JSON.

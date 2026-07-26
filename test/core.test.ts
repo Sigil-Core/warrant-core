@@ -8,6 +8,7 @@ import {
   hashPgCommitV1,
   hashPolicy,
   parsePolicyMarkdown,
+  policyCanonicalBytes,
   splitSignatureBlock
 } from "../src/index.js";
 import { createWebCryptoAdapter } from "../src/crypto/browser.js";
@@ -63,11 +64,20 @@ describe("warranty.md parser", () => {
     );
   });
 
-  it("preserves insertion order for established collation-equal policy keys", () => {
-    const first = { chainActions: { "a\u00ad": ["x"], a: ["x"] } };
-    const reversed = { chainActions: { a: ["x"], "a\u00ad": ["x"] } };
-    expect(canonicalizePolicyObject(first)).toBe("{\"chainActions\":{\"a\u00ad\":[\"x\"],\"a\":[\"x\"]}}");
-    expect(canonicalizePolicyObject(reversed)).toBe("{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}");
+  it("breaks collation ties by UTF-16 code units independent of insertion order", async () => {
+    const first = { "a\u00ad": ["x"], a: ["x"] };
+    const reversed = { a: ["x"], "a\u00ad": ["x"] };
+    const expected = "{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}";
+    const expectedHash = "9bbb6d2584aa2b8574e3990dd811afb09789dca786b4b5d4ce62757ecd44e1be";
+    const adapter = createNodeCryptoAdapter();
+
+    expect("a\u00ad".localeCompare("a", "en-US")).toBe(0);
+    expect(canonicalizePolicyObject(first)).toBe(expected);
+    expect(canonicalizePolicyObject(reversed)).toBe(expected);
+    expect(policyCanonicalBytes(first)).toEqual(new TextEncoder().encode(expected));
+    expect(policyCanonicalBytes(reversed)).toEqual(new TextEncoder().encode(expected));
+    await expect(hashPolicy(adapter, first)).resolves.toBe(expectedHash);
+    await expect(hashPolicy(adapter, reversed)).resolves.toBe(expectedHash);
   });
 
   it("pins en-US ordering for case-distinct policy keys", () => {
@@ -271,6 +281,20 @@ describe("warranty.md parser", () => {
 
   it("rejects empty custom policies and invalid HTTP DNS labels", () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toThrow("must contain an enforceable policy block");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_shim: false")).toThrow("at least one enforceable rule or control");
+    const falseAlongsideRule = parsePolicyMarkdown("version: 2.0.0\n\n## custom\ndeny_string: SECRET\nrequire_shim: false");
+    expect(falseAlongsideRule.custom).toEqual({
+      rules: [{ name: "deny_string:SECRET", type: "deny_string", value: "SECRET" }],
+      requireShim: false,
+    });
+    expect(canonicalizePolicyObject(falseAlongsideRule)).toContain('"requireShim":false');
+    const falseAlongsideApproval = parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bash\nrequire_shim: false");
+    expect(falseAlongsideApproval.custom).toEqual({
+      rules: [],
+      requireApproval: ["bash"],
+      requireShim: false,
+    });
+    expect(canonicalizePolicyObject(falseAlongsideApproval)).toContain('"requireShim":false');
     expect(() => parsePolicyMarkdown("## tool_calls\nallowed: bash\n\n## custom\ndeny_strng: SECRET")).toThrow("Unrecognized custom rule");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nallow_only.intent.: safe")).toThrow("allow_only field path must not be empty");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\ndeny_if.intent. equals unsafe")).toThrow("deny_if field path must not be empty");

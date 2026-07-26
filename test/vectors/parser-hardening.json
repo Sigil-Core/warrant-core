@@ -35,6 +35,44 @@
       "id": "unindented-quoted-chain-action",
       "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n\"1\": wallet.transfer",
       "outcome": "reject"
+    },
+    {
+      "id": "custom-false-shim-only",
+      "markdown": "version: 2.0.0\n\n## custom\nrequire_shim: false",
+      "outcome": "reject"
+    },
+    {
+      "id": "custom-false-shim-with-rule",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\nrequire_shim: false",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "deny_string:SECRET",
+              "type": "deny_string",
+              "value": "SECRET"
+            }
+          ],
+          "requireShim": false
+        }
+      }
+    },
+    {
+      "id": "custom-false-shim-with-approval",
+      "markdown": "version: 2.0.0\n\n## custom\nrequire_approval: bash\nrequire_shim: false",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [],
+          "requireApproval": [
+            "bash"
+          ],
+          "requireShim": false
+        }
+      }
     }
   ]
 }

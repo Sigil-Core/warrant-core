@@ -8,6 +8,7 @@ import {
   hashPolicy,
   parsePolicyMarkdown,
   pgCommitV1Bytes,
+  policyCanonicalBytes,
   sha256Hex,
   splitSignatureBlock,
 } from "../../src/index.js";
@@ -73,11 +74,19 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
     );
   });
 
-  it(`preserves insertion order for established collation-equal Warrant keys in ${runtime}`, () => {
-    const first = { chainActions: { "a\u00ad": ["x"], a: ["x"] } };
-    const reversed = { chainActions: { a: ["x"], "a\u00ad": ["x"] } };
-    expect(canonicalizePolicyObject(first)).toBe("{\"chainActions\":{\"a\u00ad\":[\"x\"],\"a\":[\"x\"]}}");
-    expect(canonicalizePolicyObject(reversed)).toBe("{\"chainActions\":{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}}");
+  it(`breaks collation ties by UTF-16 code units in ${runtime}`, async () => {
+    const first = { "a\u00ad": ["x"], a: ["x"] };
+    const reversed = { a: ["x"], "a\u00ad": ["x"] };
+    const expected = "{\"a\":[\"x\"],\"a\u00ad\":[\"x\"]}";
+    const expectedHash = "9bbb6d2584aa2b8574e3990dd811afb09789dca786b4b5d4ce62757ecd44e1be";
+
+    expect("a\u00ad".localeCompare("a", "en-US")).toBe(0);
+    expect(canonicalizePolicyObject(first)).toBe(expected);
+    expect(canonicalizePolicyObject(reversed)).toBe(expected);
+    expect(policyCanonicalBytes(first)).toEqual(new TextEncoder().encode(expected));
+    expect(policyCanonicalBytes(reversed)).toEqual(new TextEncoder().encode(expected));
+    await expect(hashPolicy(adapter, first)).resolves.toBe(expectedHash);
+    await expect(hashPolicy(adapter, reversed)).resolves.toBe(expectedHash);
   });
 
   it(`pins en-US ordering for case-distinct Warrant keys in ${runtime}`, () => {
