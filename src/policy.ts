@@ -25,6 +25,11 @@ const RESOURCE_ENUMS: Record<string, Set<string>> = {
   "database.allowedOperations": DATABASE_OPERATIONS,
   "database.requireApproval": DATABASE_OPERATIONS,
 };
+const RESOURCE_BOOLEAN_OUTPUT_KEYS = new Set(["requireShim", "blockOutsideWrites", "protectGitHistory", "protectSensitiveFiles", "requireReadOnlyForSelect", "denyUnreviewedIndirectEffects"]);
+const RESOURCE_NUMERIC_OUTPUT_KEYS = new Set(["maxFilesPerAction", "maxBytesWrittenPerTask", "maxBytesDeletedPerTask", "maxDestructiveEffectsPerTask", "maxRefChangesPerTask", "maxSchemaChangesPerTask", "statementTimeoutMs", "lockTimeoutMs"]);
+const RESOURCE_ACTION_OUTPUT_KEYS = new Set(["actions", "filesystemActions", "blockedPaths", "allowedResources", "protectedRefs"]);
+const RESOURCE_ROOT_OUTPUT_KEYS = new Set(["roots", "writeRoots", "readRoots"]);
+const RESOURCE_SCALAR_OUTPUT_KEYS = new Set(["routineCatalog", "protectedClassCatalog"]);
 const SOFT_LIMIT_CAP_FIELDS = {
   max_count: "maxCount",
   max_sum_usd: "maxSumUsd",
@@ -217,10 +222,10 @@ function boolean(value: string, key: string, strict: boolean): boolean {
   return normalized === "true";
 }
 
-function number(value: string): number | undefined {
+const number = (value: string): number | undefined => {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
+};
 
 function integer(value: string): number | undefined {
   const parsed = Number.parseInt(value, 10);
@@ -328,24 +333,25 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
     chains = false;
     const token = line.match(/^token\.([A-Za-z0-9_]+)\.(max_transaction|consensus_threshold|decimals|addresses):\s*(.+)$/);
     if (token) {
-      const symbol = token[1]!.toUpperCase();
-      const field = token[2]!;
+      const [, rawSymbol, field, rawTokenValue] = token;
+      if (!rawSymbol || !field || rawTokenValue === undefined) continue;
+      const symbol = rawSymbol.toUpperCase();
       const tokenField = `${symbol}.${field}`;
       if (field !== "addresses" && tokenFields.has(tokenField)) {
         throw new Error(`Duplicate EVM token policy key: token.${tokenField}`);
       }
       tokenFields.add(tokenField);
       const profile = tokens[symbol] ??= {};
-      if (token[2] === "decimals") {
-        const rawDecimals = token[3]!.trim();
+      if (field === "decimals") {
+        const rawDecimals = rawTokenValue.trim();
         if (!/^\d+$/.test(rawDecimals)) throw new Error(`token.${symbol}.decimals must be an integer from 0 through 36`);
         const parsed = Number(rawDecimals);
         if (!Number.isSafeInteger(parsed) || parsed > 36) throw new Error(`token.${symbol}.decimals must be an integer from 0 through 36`);
         profile.decimals = parsed;
       }
-      else if (token[2] === "addresses") profile.addresses = [...new Set([...(profile.addresses as string[] ?? []), ...list(token[3]!).map((entry) => entry.toLowerCase())])];
-      else if (token[2] === "max_transaction") profile.maxTransaction = token[3]!.trim();
-      else profile.consensusThreshold = token[3]!.trim();
+      else if (field === "addresses") profile.addresses = [...new Set([...(profile.addresses as string[] ?? []), ...list(rawTokenValue).map((entry) => entry.toLowerCase())])];
+      else if (field === "max_transaction") profile.maxTransaction = rawTokenValue.trim();
+      else profile.consensusThreshold = rawTokenValue.trim();
       continue;
     }
     const [key, value] = requireKeyValue(line, "EVM");
@@ -489,22 +495,25 @@ function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown
   for (const line of lines) {
     const cap = line.match(/^cap\.([A-Za-z0-9_-]+)\.(max_count|max_sum_usd|window|action|group_by|amount_field|window_days|window_hours|timezone):\s*(.*?)\s*$/);
     if (cap) {
+      const [, capName, rawField, rawValue] = cap;
+      if (!capName || !rawField || rawValue === undefined) continue;
       if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0");
-      if (["daily_tool_calls", "daily_evm_limit_eth"].includes(cap[1]!)) throw new Error(`cap name ${cap[1]} is reserved for the legacy limit`);
-      if (RESERVED_PROFILE_NAMES.has(cap[1]!)) throw new Error(`Reserved soft_limits cap name: ${cap[1]}`);
-      if (["window_days", "window_hours", "timezone"].includes(cap[2]!)) throw new Error(`cap.${cap[1]}.${cap[2]} is not yet supported`);
-      const field = cap[2]! as keyof typeof SOFT_LIMIT_CAP_FIELDS;
-      const canonicalKey = `${cap[1]}.${SOFT_LIMIT_CAP_FIELDS[field]}`;
-      if (capKeys.has(canonicalKey)) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`);
+      if (["daily_tool_calls", "daily_evm_limit_eth"].includes(capName)) throw new Error(`cap name ${capName} is reserved for the legacy limit`);
+      if (RESERVED_PROFILE_NAMES.has(capName)) throw new Error(`Reserved soft_limits cap name: ${capName}`);
+      if (["window_days", "window_hours", "timezone"].includes(rawField)) throw new Error(`cap.${capName}.${rawField} is not yet supported`);
+      const field = rawField as keyof typeof SOFT_LIMIT_CAP_FIELDS;
+      const canonicalKey = `${capName}.${SOFT_LIMIT_CAP_FIELDS[field]}`;
+      if (capKeys.has(canonicalKey)) throw new Error(`Duplicate soft_limits cap key: ${capName}.${field}`);
       capKeys.add(canonicalKey);
-      const profile = caps[cap[1]!] ??= {};
-      const rawValue = cap[3]!.trim(); const value = unquote(rawValue);
-      if (field === "max_count") { if (!positiveInt(rawValue)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(rawValue); }
-      else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; }
-      else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; }
-      else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; }
-      else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`);
-      else profile.amountField = required(value, `cap.${cap[1]}.amount_field`);
+      const profile = caps[capName] ??= {};
+      const raw = rawValue.trim();
+      const value = unquote(raw);
+      if (field === "max_count") { if (!positiveInt(raw)) throw new Error(`cap.${capName}.max_count must be a positive integer`); profile.maxCount = Number(raw); }
+      else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${capName}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; }
+      else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${capName}.window must be day, hour, or task`); profile.window = value; }
+      else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${capName}.action supports only an exact value or one trailing * wildcard`); profile.action = value; }
+      else if (field === "group_by") profile.groupBy = required(value, `cap.${capName}.group_by`);
+      else profile.amountField = required(value, `cap.${capName}.amount_field`);
       continue;
     }
     if (line.startsWith("cap.")) throw new Error(`Unrecognized soft_limits policy key: ${line.split(":", 1)[0]}`);
@@ -563,29 +572,26 @@ function hasEnforceableExecutionLimitControl(limits: Record<string, unknown> | u
   return Object.values(limits ?? {}).some((value) => value !== undefined && value !== false);
 }
 
-function parseResource(name: string, lines: string[]): Record<string, unknown> {
-  const config = RESOURCE_CONFIG[name]!; const result: Record<string, unknown> = {};
-  const seen = new Set<string>();
-  for (const line of lines) {
-    const match = line.match(/^([\w.]+):\s*(.*)$/);
-    if (!match) throw new Error(`Unrecognized ${name} policy line: ${line}`);
-    const key = match[1]!;
-    const value = match[2]!;
-    if (seen.has(key)) throw new Error(`Duplicate ${name} policy key: ${key}`);
-    seen.add(key);
-    const outputKey = config.keys[key]; if (!outputKey) throw new Error(`Unrecognized ${name} policy key: ${key}`);
-    if (["requireShim", "blockOutsideWrites", "protectGitHistory", "protectSensitiveFiles", "requireReadOnlyForSelect", "denyUnreviewedIndirectEffects"].includes(outputKey)) result[outputKey] = boolean(value, key, true);
-    else if (outputKey.startsWith("max") || outputKey.endsWith("TimeoutMs")) { if (!positiveInt(value)) throw new Error(`${key} must be a positive integer`); result[outputKey] = Number(value); }
-    else if (["actions", "filesystemActions", "blockedPaths", "allowedResources", "protectedRefs"].includes(outputKey)) result[outputKey] = resourceActionList(value, key);
-    else if (["roots", "writeRoots", "readRoots"].includes(outputKey)) { const roots = resourceList(value); if (!roots.length || roots.some((root) => !isCanonicalRoot(root))) throw new Error(`${key} must contain . or canonical absolute paths`); result[outputKey] = roots; }
-    else if (outputKey === "routineCatalog" || outputKey === "protectedClassCatalog") result[outputKey] = required(value.trim(), key);
-    else {
-      const values = resourceList(value);
-      const allowed = RESOURCE_ENUMS[`${name}.${outputKey}`];
-      if (allowed && values.some((entry) => !allowed.has(entry))) throw new Error(`${key} contains an unsupported value`);
-      result[outputKey] = values;
-    }
+const parseResourceValue = (name: string, key: string, outputKey: string, value: string): unknown => {
+  if (RESOURCE_BOOLEAN_OUTPUT_KEYS.has(outputKey)) return boolean(value, key, true);
+  if (RESOURCE_NUMERIC_OUTPUT_KEYS.has(outputKey)) {
+    if (!positiveInt(value)) throw new Error(`${key} must be a positive integer`);
+    return Number(value);
   }
+  if (RESOURCE_ACTION_OUTPUT_KEYS.has(outputKey)) return resourceActionList(value, key);
+  if (RESOURCE_ROOT_OUTPUT_KEYS.has(outputKey)) {
+    const roots = resourceList(value);
+    if (!roots.length || roots.some((root) => !isCanonicalRoot(root))) throw new Error(`${key} must contain . or canonical absolute paths`);
+    return roots;
+  }
+  if (RESOURCE_SCALAR_OUTPUT_KEYS.has(outputKey)) return required(value.trim(), key);
+  const values = resourceList(value);
+  const allowed = RESOURCE_ENUMS[`${name}.${outputKey}`];
+  if (allowed && values.some((entry) => !allowed.has(entry))) throw new Error(`${key} contains an unsupported value`);
+  return values;
+};
+
+const validateResourceResult = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
   for (const [field, value] of Object.entries(result)) {
     if (Array.isArray(value) && value.length === 0) throw new Error(`${field} must contain at least one entry`);
   }
@@ -601,6 +607,25 @@ function parseResource(name: string, lines: string[]): Record<string, unknown> {
   if (name === "database" && (result.allowedResources as string[]).includes("*")) {
     throw new Error("allowed_resources cannot contain bare *");
   }
+};
+
+function parseResource(name: string, lines: string[]): Record<string, unknown> {
+  const config = RESOURCE_CONFIG[name];
+  if (!config) throw new Error(`Unrecognized policy block ## ${name}`);
+  const result: Record<string, unknown> = {};
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const match = line.match(/^([\w.]+):\s*(.*)$/);
+    if (!match) throw new Error(`Unrecognized ${name} policy line: ${line}`);
+    const [, key, value] = match;
+    if (key === undefined || value === undefined) throw new Error(`Unrecognized ${name} policy line: ${line}`);
+    if (seen.has(key)) throw new Error(`Duplicate ${name} policy key: ${key}`);
+    seen.add(key);
+    const outputKey = config.keys[key];
+    if (!outputKey) throw new Error(`Unrecognized ${name} policy key: ${key}`);
+    result[outputKey] = parseResourceValue(name, key, outputKey, value);
+  }
+  validateResourceResult(name, config, result);
   return result;
 }
 
@@ -611,7 +636,7 @@ function requiredActionList(value: string, key: string): string[] {
   if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`);
   return [...new Set(values)];
 }
-function parseGenericControl(result: Record<string, unknown>, key: string, value: string, isV2: boolean, seen?: Set<string>): boolean {
+const parseGenericControl = (result: Record<string, unknown>, key: string, value: string, isV2: boolean, seen?: Set<string>): boolean => {
   if (key !== "require_approval" && key !== "require_shim") return false;
   if (!isV2) throw new Error("Policy syntax requires version 2.0.0");
   if (seen?.has(key)) throw new Error(`Duplicate policy key: ${key}`);
@@ -619,29 +644,38 @@ function parseGenericControl(result: Record<string, unknown>, key: string, value
   if (key === "require_approval") result.requireApproval = requiredActionList(value, key);
   else result.requireShim = boolean(value, key, true);
   return true;
-}
+};
 function isCanonicalRoot(value: string): boolean {
   return value === "." || value === "/" || (value.startsWith("/") && !value.endsWith("/") && !value.includes("//") && value.split("/").every((segment) => segment !== "." && segment !== ".."));
 }
 function positiveInt(value: string): boolean { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; }
+const fixedDecimalParts = (value: string): { whole: string; fraction: string; token: string } | undefined => {
+  const match = value.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?/);
+  if (!match) return undefined;
+  const whole = match[1];
+  if (whole === undefined) return undefined;
+  return { whole, fraction: match[2] ?? "", token: match[0] };
+};
+const decimalMicros = ({ whole, fraction }: { whole: string; fraction: string }): bigint =>
+  BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
 function dailyEvmLimit(value: string): number | undefined {
   const raw = value.trim();
-  const prefix = raw.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?/);
-  if (!prefix) return undefined;
-  const suffix = raw.slice(prefix[0].length);
+  const parts = fixedDecimalParts(raw);
+  if (!parts) return undefined;
+  const suffix = raw.slice(parts.token.length);
   if (/^[\d.+-]/.test(suffix) || /^[eE][+-]?\d/.test(suffix)) return undefined;
-  const micros = BigInt(prefix[1]!) * 1_000_000n + BigInt((prefix[2] ?? "").padEnd(6, "0"));
+  const micros = decimalMicros(parts);
   if (micros < 1n || micros > MAX_COUNTER_MICROS) return undefined;
-  const parsed = Number(prefix[0]);
+  const parsed = Number(parts.token);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
   return parsed;
 }
-function positiveDecimal(value: string): boolean {
+const positiveDecimal = (value: string): boolean => {
   const raw = unquote(value.trim());
-  const match = raw.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?$/);
-  if (!match) return false;
-  const micros = BigInt(match[1]!) * 1_000_000n + BigInt((match[2] ?? "").padEnd(6, "0"));
+  const parts = fixedDecimalParts(raw);
+  if (!parts || parts.token !== raw) return false;
+  const micros = decimalMicros(parts);
   return micros >= 1n && micros <= MAX_SAFE * 1_000_000n;
-}
-function required(value: string, key: string): string { if (!value) throw new Error(`${key} must not be empty`); return value; }
+};
+const required = (value: string, key: string): string => { if (!value) throw new Error(`${key} must not be empty`); return value; };
 function removeEmpty(policy: ParsedPolicy): ParsedPolicy { for (const key of Object.keys(policy) as Array<keyof ParsedPolicy>) if (key !== "version" && policy[key] && typeof policy[key] === "object" && !Object.keys(policy[key] as object).length) delete policy[key]; return policy; }

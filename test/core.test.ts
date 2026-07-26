@@ -432,7 +432,7 @@ describe("warranty.md parser", () => {
     const values = (markdown: string) => parsePolicyMarkdown(markdown).custom?.rules[0]?.values;
     const prefix = "version: 2.0.0\n\n## custom\n";
     expect(values(`${prefix}allow_only.intent.code matches: ^[0-9]{1,3}$`)).toEqual(["^[0-9]{1", "3}$"]);
-    expect(values(`${prefix}allow_only.intent.code matches: \"^[0-9]{1,3}$\"`)).toEqual(['"^[0-9]{1', '3}$"']);
+    expect(values(`${prefix}allow_only.intent.code matches: "^[0-9]{1,3}$"`)).toEqual(['"^[0-9]{1', '3}$"']);
     expect(values(`${prefix}allow_only.intent.code matches: ^yes$\nallow_only.intent.code matches: ^no$`)).toEqual(["^yes$", "^no$"]);
     expect(values(`${prefix}allow_only.intent.environment: production, staging`)).toEqual(["production", "staging"]);
   });
