@@ -58,7 +58,120 @@ export function pgCommitRejectionValue(kind: string): unknown {
   return construct();
 }
 
-export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoAdapter): void {
+const defineSharedMcpToolOverlapTests = (runtime: string): void => {
+  it(`rejects conflicting MCP tool allow and block patterns in ${runtime}`, () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## mcp\nallowed_tools: github.delete\nblocked_tools: github.*")).toThrow("same tool");
+  });
+};
+
+const defineSharedToolCallControlTests = (runtime: string): void => {
+  it(`rejects a false-only Policy 2 tool-call shim control in ${runtime}`, () => {
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nrequire_shim: false")).toThrow("at least one enforceable rule or control");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nrequire_approval: bash").tool_calls).toEqual({ requireApproval: ["bash"] });
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nrequire_shim: true").tool_calls).toEqual({ requireShim: true });
+  });
+};
+
+const defineSharedPolicyFixtureTests = (adapter: CryptoAdapter): void => {
+  for (const fixture of policyFixture.fixtures) {
+    it(`matches the ${fixture.slug} policy vector`, async () => {
+      await expect(sha256Hex(adapter, fixture.templateBody)).resolves.toBe(fixture.templateBodySha256);
+      const parsed = parsePolicyMarkdown(fixture.templateBody);
+      expect(parsed).toEqual(fixture.canonicalPolicy);
+      expect(canonicalizePolicyObject(parsed)).toBe(fixture.canonicalPolicyJson);
+      await expect(hashPolicy(adapter, parsed)).resolves.toBe(fixture.policyHashSha256);
+    });
+  }
+};
+
+const defineSharedSignParityTests = (): void => {
+  assertKnownParityDivergencesCovered();
+  for (const parityCase of sigilSignParserParityFixture.cases) {
+    if (KNOWN_PARITY_DIVERGENCES.has(parityCase.id)) continue;
+    it(`matches the ${parityCase.id} Sigil Sign parser vector`, () => {
+      if (parityCase.outcome === "accept") {
+        if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);
+        expect(parsePolicyMarkdown(parityCase.markdown)).toEqual(parityCase.canonicalPolicy);
+        return;
+      }
+      expect(() => parsePolicyMarkdown(parityCase.markdown)).toThrow();
+    });
+  }
+};
+
+const defineSharedParserHardeningTests = (): void => {
+  for (const hardeningCase of parserHardeningFixture.cases) {
+    it(`matches the ${hardeningCase.id} warrant-core parser-hardening vector`, () => {
+      if (hardeningCase.outcome === "accept") {
+        if (!("canonicalPolicy" in hardeningCase)) throw new Error(`Missing canonical policy for ${hardeningCase.id}`);
+        expect(parsePolicyMarkdown(hardeningCase.markdown)).toEqual(hardeningCase.canonicalPolicy);
+        return;
+      }
+      expect(() => parsePolicyMarkdown(hardeningCase.markdown)).toThrow();
+    });
+  }
+};
+
+const defineSharedCommitmentTests = (adapter: CryptoAdapter): void => {
+  for (const vector of commitmentFixture.vectors) {
+    it(`matches the ${vector.id} commitment vector`, async () => {
+      const intent = vector.intent as JsonValue;
+      expect(canonicalizePgCommitV1(intent)).toBe(vector.canonicalJson);
+      expect(new TextDecoder().decode(pgCommitV1Bytes(intent))).toBe(vector.canonicalJson);
+      await expect(hashPgCommitV1(adapter, intent)).resolves.toBe(vector.sha256);
+    });
+  }
+};
+
+const defineSharedLaunchScenarioTests = (adapter: CryptoAdapter): void => {
+  for (const vector of launchScenarioFixture.vectors) {
+    it(`matches the ${vector.id} launch commitment vector`, async () => {
+      const intent = vector.request.intent as JsonValue;
+      expect(canonicalizePgCommitV1(intent)).toBe(vector.canonicalIntentJson);
+      expect(new TextDecoder().decode(pgCommitV1Bytes(intent))).toBe(vector.canonicalIntentJson);
+      expect(vector.request.txCommit).toBe(vector.txCommitSha256);
+      await expect(hashPgCommitV1(adapter, intent)).resolves.toBe(vector.txCommitSha256);
+    });
+  }
+};
+
+const defineSharedCommitmentRejectionTests = (): void => {
+  for (const rejection of commitmentFixture.rejections) {
+    it(`rejects the ${rejection.id} commitment vector`, () => {
+      expect(() => canonicalizePgCommitV1(pgCommitRejectionValue(rejection.runtimeValueKind))).toThrow(rejection.error);
+    });
+  }
+};
+
+const defineSharedSignatureTests = (adapter: CryptoAdapter): void => {
+  for (const vector of signatureFixture.vectors) {
+    it(`matches the ${vector.id} signature vector`, async () => {
+      if (vector.messageUtf8 !== undefined) {
+        const publicKey = bytesFromBase64url(signatureFixture.keys[vector.key as "rfc8032Test1"].rawPublicKeyBase64url);
+        await expect(adapter.verifyEd25519!(publicKey, bytesFromBase64url(vector.signatureBase64url!), new TextEncoder().encode(vector.messageUtf8))).resolves.toBe(true);
+      } else if (vector.signedMarkdown !== undefined) {
+        expect(splitSignatureBlock(vector.signedMarkdown)).toEqual({ unsigned: vector.unsigned, signature: vector.signatureBase64url });
+        expect(appendSignatureBlock(vector.unsigned!, vector.signatureBase64url!)).toBe(vector.signedMarkdown);
+      } else {
+        expect(() => splitSignatureBlock(vector.markdown!)).toThrow(vector.error);
+      }
+    });
+  }
+};
+
+const defineSharedPolicyCommitmentAndSignatureVectorTests = (runtime: string, adapter: CryptoAdapter): void => {
+  describe(`${runtime} shared policy, commitment, and signature vectors`, () => {
+    defineSharedPolicyFixtureTests(adapter);
+    defineSharedSignParityTests();
+    defineSharedParserHardeningTests();
+    defineSharedCommitmentTests(adapter);
+    defineSharedLaunchScenarioTests(adapter);
+    defineSharedCommitmentRejectionTests();
+    defineSharedSignatureTests(adapter);
+  });
+};
+
+export const defineSharedRuntimeVectorTests = (runtime: string, adapter: CryptoAdapter): void => {
   defineConsumerCompatibilityVectorTests(runtime);
 
   it(`preserves established Warrant collation in ${runtime}`, () => {
@@ -162,79 +275,7 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
       }
     }
   });
-
-  describe(`${runtime} shared policy, commitment, and signature vectors`, () => {
-    for (const fixture of policyFixture.fixtures) {
-      it(`matches the ${fixture.slug} policy vector`, async () => {
-        await expect(sha256Hex(adapter, fixture.templateBody)).resolves.toBe(fixture.templateBodySha256);
-        const parsed = parsePolicyMarkdown(fixture.templateBody);
-        expect(parsed).toEqual(fixture.canonicalPolicy);
-        expect(canonicalizePolicyObject(parsed)).toBe(fixture.canonicalPolicyJson);
-        await expect(hashPolicy(adapter, parsed)).resolves.toBe(fixture.policyHashSha256);
-      });
-    }
-
-    assertKnownParityDivergencesCovered();
-    for (const parityCase of sigilSignParserParityFixture.cases) {
-      if (KNOWN_PARITY_DIVERGENCES.has(parityCase.id)) continue;
-      it(`matches the ${parityCase.id} Sigil Sign parser vector`, () => {
-        if (parityCase.outcome === "accept") {
-          if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);
-          expect(parsePolicyMarkdown(parityCase.markdown)).toEqual(parityCase.canonicalPolicy);
-        } else {
-          expect(() => parsePolicyMarkdown(parityCase.markdown)).toThrow();
-        }
-      });
-    }
-
-    for (const hardeningCase of parserHardeningFixture.cases) {
-      it(`matches the ${hardeningCase.id} warrant-core parser-hardening vector`, () => {
-        if (hardeningCase.outcome === "accept") {
-          if (!("canonicalPolicy" in hardeningCase)) throw new Error(`Missing canonical policy for ${hardeningCase.id}`);
-          expect(parsePolicyMarkdown(hardeningCase.markdown)).toEqual(hardeningCase.canonicalPolicy);
-        } else {
-          expect(() => parsePolicyMarkdown(hardeningCase.markdown)).toThrow();
-        }
-      });
-    }
-
-    for (const vector of commitmentFixture.vectors) {
-      it(`matches the ${vector.id} commitment vector`, async () => {
-        const intent = vector.intent as JsonValue;
-        expect(canonicalizePgCommitV1(intent)).toBe(vector.canonicalJson);
-        expect(new TextDecoder().decode(pgCommitV1Bytes(intent))).toBe(vector.canonicalJson);
-        await expect(hashPgCommitV1(adapter, intent)).resolves.toBe(vector.sha256);
-      });
-    }
-
-    for (const vector of launchScenarioFixture.vectors) {
-      it(`matches the ${vector.id} launch commitment vector`, async () => {
-        const intent = vector.request.intent as JsonValue;
-        expect(canonicalizePgCommitV1(intent)).toBe(vector.canonicalIntentJson);
-        expect(new TextDecoder().decode(pgCommitV1Bytes(intent))).toBe(vector.canonicalIntentJson);
-        expect(vector.request.txCommit).toBe(vector.txCommitSha256);
-        await expect(hashPgCommitV1(adapter, intent)).resolves.toBe(vector.txCommitSha256);
-      });
-    }
-
-    for (const rejection of commitmentFixture.rejections) {
-      it(`rejects the ${rejection.id} commitment vector`, () => {
-        expect(() => canonicalizePgCommitV1(pgCommitRejectionValue(rejection.runtimeValueKind))).toThrow(rejection.error);
-      });
-    }
-
-    for (const vector of signatureFixture.vectors) {
-      it(`matches the ${vector.id} signature vector`, async () => {
-        if (vector.messageUtf8 !== undefined) {
-          const publicKey = bytesFromBase64url(signatureFixture.keys[vector.key as "rfc8032Test1"].rawPublicKeyBase64url);
-          await expect(adapter.verifyEd25519!(publicKey, bytesFromBase64url(vector.signatureBase64url!), new TextEncoder().encode(vector.messageUtf8))).resolves.toBe(true);
-        } else if (vector.signedMarkdown !== undefined) {
-          expect(splitSignatureBlock(vector.signedMarkdown)).toEqual({ unsigned: vector.unsigned, signature: vector.signatureBase64url });
-          expect(appendSignatureBlock(vector.unsigned!, vector.signatureBase64url!)).toBe(vector.signedMarkdown);
-        } else {
-          expect(() => splitSignatureBlock(vector.markdown!)).toThrow(vector.error);
-        }
-      });
-    }
-  });
-}
+  defineSharedMcpToolOverlapTests(runtime);
+  defineSharedToolCallControlTests(runtime);
+  defineSharedPolicyCommitmentAndSignatureVectorTests(runtime, adapter);
+};
