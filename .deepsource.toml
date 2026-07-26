@@ -1,0 +1,23 @@
+version = 1
+
+test_patterns = [
+  "test/**",
+]
+
+exclude_patterns = [
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/coverage/**",
+]
+
+[[analyzers]]
+name = "javascript"
+
+  [analyzers.meta]
+  dialect = "typescript"
+  module_system = "es-modules"
+  ecma_version = "2020"
+  environment = ["nodejs", "browser"]
+
+[[analyzers]]
+name = "secrets"
