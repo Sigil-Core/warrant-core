@@ -426,7 +426,9 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
     if (allow) {
       if (!isV2 && (allow[1] || allow[3] || allow[4])) throw new Error("Policy syntax requires version 2.0.0");
       const actionScope = allow[1]?.trim(); if (actionScope === "") throw new Error("allow_only action scope must not be empty");
-      const fieldPath = stripIntent(allow[2]!); const operator = allow[4] === "prefix" ? "starts_with" : (allow[4] ?? "equals"); const values = list(allow[5]!);
+      const fieldPath = stripIntent(allow[2]!); const operator = allow[4] === "prefix" ? "starts_with" : (allow[4] ?? "equals"); const rawValues = allow[5]!.trim();
+      if (operator === "matches" && rawValues.includes(",")) throw new Error("allow_only matches patterns must not contain commas; use repeated declarations for multiple patterns");
+      const values = operator === "matches" ? [unquote(rawValues)].filter(Boolean) : list(rawValues);
       if (!fieldPath) throw new Error("allow_only field path must not be empty");
       if (!values.length) throw new Error(`allow_only.${fieldPath} must contain at least one value`);
       const scope = `${actionScope ?? "<global>"}::${fieldPath}`;

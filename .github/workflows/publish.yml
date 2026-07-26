@@ -25,10 +25,7 @@ jobs:
           persist-credentials: false
       - id: version
         name: Match the tag to package.json
-        run: |
-          package_version="$(node -p "require('./package.json').version")"
-          test "$GITHUB_REF_NAME" = "v$package_version"
-          printf 'version=%s\n' "$package_version" >> "$GITHUB_OUTPUT"
+        run: node scripts/verify-release-tag.mjs
 
   publish:
     name: Publish ${{ needs.verify-tag.outputs.version }}

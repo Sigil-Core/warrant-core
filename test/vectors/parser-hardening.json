@@ -154,6 +154,60 @@
       "id": "policy-2-1-empty-database-approval",
       "markdown": "version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nrequire_approval: ,\nallowed_resources: public.*\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true",
       "outcome": "reject"
+    },
+    {
+      "id": "matches-regex-with-unquoted-comma",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: ^[0-9]{1,3}$",
+      "outcome": "reject"
+    },
+    {
+      "id": "matches-regex-with-quoted-comma",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: \"^[0-9]{1,3}$\"",
+      "outcome": "reject"
+    },
+    {
+      "id": "multiple-matches-patterns-use-repeated-declarations",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: ^yes$\nallow_only.intent.code matches: ^no$",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only.code",
+              "type": "allow_field",
+              "fieldPath": "code",
+              "operator": "matches",
+              "values": [
+                "^yes$",
+                "^no$"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "standalone-html-comment-closer-is-policy-text",
+      "markdown": "version: 2.0.0\n\n<!-- deny_string: HIDDEN -->\n## custom\ndeny_string: -->",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "deny_string:-->",
+              "type": "deny_string",
+              "value": "-->"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "standalone-comment-closer-before-unclosed-opener",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: -->\n<!-- unclosed",
+      "outcome": "reject"
     }
   ]
 }

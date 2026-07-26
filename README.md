@@ -30,7 +30,7 @@ import {
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. |
+| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. A `matches` declaration carries one comma-free regex value; comma-bearing patterns reject to preserve the frozen Sigil Sign parser boundary. Repeat the declaration to allow multiple patterns. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |
@@ -107,6 +107,8 @@ The Node adapter accepts Ed25519 PKCS#8 private-key bytes for signing. Its verif
 
 `splitSignatureBlock` and `appendSignatureBlock` operate on Warrant text structure. They do not hash, sign, verify, base64url-decode, validate policy semantics, or select a trusted public key.
 
+Closed HTML comments are ignored when locating policy and signature structure. A standalone `-->` remains literal policy text, while any `<!--` without a later closer rejects the artifact.
+
 The helpers normalize trailing whitespace. A caller that must verify a signature over original raw file bytes must retain those bytes separately and must not reconstruct them through these helpers.
 
 ## Security boundary
@@ -140,7 +142,7 @@ That frozen corpus records legacy parser compatibility behaviors from the pinned
 
 ## Release and npm trusted publishing
 
-`.github/workflows/publish.yml` publishes only an unpublished version whose tag exactly equals `v` plus the package version. It runs on a GitHub-hosted runner with Node 24, npm 11.5.1 or later, `id-token: write`, and `contents: read`. It tests, builds, packs, and inspects the tarball before `npm publish --access public --provenance`. It fails before publication if that immutable npm version already exists.
+`.github/workflows/publish.yml` publishes only an unpublished stable semantic version whose tag exactly equals `v` plus the package version. Prerelease and build-metadata versions fail before the OIDC publish job. The workflow runs on a GitHub-hosted runner with Node 24, npm 11.5.1 or later, `id-token: write`, and `contents: read`. It tests, builds, packs, and inspects the tarball before `npm publish --access public --provenance`. It fails before publication if that immutable npm version already exists.
 
 The npm package settings do not exist until a package has been published. Bootstrap that one-time dependency without making the first stable release manual:
 

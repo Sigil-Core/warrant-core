@@ -23,6 +23,12 @@
       "signatureBase64url": "jQ41oYlVd05FocbgWGNhuMioDVietDuSaukoh122AR_lJzESa7Qmbi1qGmK3i_hcJ3DyfZv31o5jwY1btSW0Bg"
     },
     {
+      "id": "signature-block-with-literal-comment-closer",
+      "unsigned": "version: 2.0.0\n\n<!--\n## signature\nsigil-sig: fake\n-->\n\n## custom\ndeny_string: -->",
+      "signedMarkdown": "version: 2.0.0\n\n<!--\n## signature\nsigil-sig: fake\n-->\n\n## custom\ndeny_string: -->\n\n## signature\nsigil-sig: abc_DEF-123\n",
+      "signatureBase64url": "abc_DEF-123"
+    },
+    {
       "id": "missing-sigil-sig",
       "markdown": "version: 2.0.0\n\n## signature\n",
       "error": "Signature block must contain only sigil-sig"
@@ -31,6 +37,11 @@
       "id": "signature-block-not-final",
       "markdown": "version: 2.0.0\n\n## signature\nsigil-sig: abc\n\n## custom\ndeny_string: test",
       "error": "Signature block must be final"
+    },
+    {
+      "id": "literal-comment-closer-before-unclosed-opener",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: -->\n<!-- unclosed",
+      "error": "Unterminated HTML comment"
     }
   ]
 }

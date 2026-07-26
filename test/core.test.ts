@@ -418,6 +418,23 @@ describe("warranty.md parser", () => {
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: API.Example.Com., *.example.com").tool_calls?.httpAllowedHosts).toEqual(["api.example.com", "*.example.com"]);
   });
 
+  it("rejects matches patterns containing commas without widening them", () => {
+    const values = (markdown: string) => parsePolicyMarkdown(markdown).custom?.rules[0]?.values;
+    const prefix = "version: 2.0.0\n\n## custom\n";
+    expect(() => values(`${prefix}allow_only.intent.code matches: ^[0-9]{1,3}$`)).toThrow("matches patterns must not contain commas");
+    expect(() => values(`${prefix}allow_only.intent.code matches: \"^[0-9]{1,3}$\"`)).toThrow("matches patterns must not contain commas");
+    expect(values(`${prefix}allow_only.intent.code matches: ^yes$\nallow_only.intent.code matches: ^no$`)).toEqual(["^yes$", "^no$"]);
+    expect(values(`${prefix}allow_only.intent.environment: production, staging`)).toEqual(["production", "staging"]);
+  });
+
+  it("treats standalone HTML comment closers as policy text and still rejects unclosed openers", () => {
+    const markdown = "version: 2.0.0\n\n<!-- deny_string: HIDDEN -->\n## custom\ndeny_string: -->";
+    expect(parsePolicyMarkdown(markdown).custom?.rules).toEqual([
+      { name: "deny_string:-->", type: "deny_string", value: "-->" },
+    ]);
+    expect(() => parsePolicyMarkdown(`${markdown}\n<!-- unclosed`)).toThrow("Unterminated HTML comment");
+  });
+
   it("preserves every enforceable execution control without a numeric limit", () => {
     expect(parsePolicyMarkdown([
       "version: 2.0.0",
