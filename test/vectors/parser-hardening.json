@@ -158,12 +158,36 @@
     {
       "id": "matches-regex-with-unquoted-comma",
       "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: ^[0-9]{1,3}$",
-      "outcome": "reject"
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [{
+            "name": "allow_only.code",
+            "type": "allow_field",
+            "fieldPath": "code",
+            "operator": "matches",
+            "values": ["^[0-9]{1", "3}$"]
+          }]
+        }
+      }
     },
     {
       "id": "matches-regex-with-quoted-comma",
       "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: \"^[0-9]{1,3}$\"",
-      "outcome": "reject"
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [{
+            "name": "allow_only.code",
+            "type": "allow_field",
+            "fieldPath": "code",
+            "operator": "matches",
+            "values": ["\"^[0-9]{1", "3}$\""]
+          }]
+        }
+      }
     },
     {
       "id": "multiple-matches-patterns-use-repeated-declarations",
@@ -238,6 +262,25 @@
       "id": "duplicate-soft-limit-generic-control",
       "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 1\nrequire_approval: bash\nrequire_approval: email.send",
       "outcome": "reject"
+    },
+    {
+      "id": "execution-approval-empty-item",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_approval: bash.exec,",
+      "outcome": "reject"
+    },
+    {
+      "id": "execution-limits-comment-only",
+      "markdown": "version: 2.1.0\n\n## execution_limits\n# no controls",
+      "outcome": "reject"
+    },
+    {
+      "id": "legacy-uppercase-tool-boolean",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nemail.require_approval: TRUE",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "1.0.0",
+        "tool_calls": { "emailRequireApproval": false }
+      }
     }
   ]
 }

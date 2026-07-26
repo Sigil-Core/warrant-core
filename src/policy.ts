@@ -98,20 +98,7 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
     else if (section.name === "execution_limits") result.execution_limits = parseExecutionLimits(lines, isV2);
     else if (RESOURCE_SECTIONS.has(section.name)) (result as unknown as Record<string, unknown>)[section.name] = parseResource(section.name, lines);
   }
-  const parsed = removeEmpty(result);
-  const hasExecutionLimitControls = hasEnforceableExecutionLimitControl(parsed.execution_limits);
-  const enforceable = parsed.evm !== undefined
-    || parsed.tool_calls !== undefined
-    || parsed.custom !== undefined
-    || parsed.mcp !== undefined
-    || (isV2 && parsed.soft_limits !== undefined)
-    || hasExecutionLimitControls
-    || parsed.repository !== undefined
-    || parsed.filesystem !== undefined
-    || parsed.git !== undefined
-    || parsed.database !== undefined;
-  if (!enforceable) throw new Error("warranty.md must contain an enforceable policy block");
-  return parsed;
+  return removeEmpty(result);
 }
 
 interface Section { name: string; body: string; }
@@ -226,7 +213,7 @@ function unquote(value: string): string {
 function boolean(value: string, key: string, strict: boolean): boolean {
   const normalized = value.trim().toLowerCase();
   if (strict && normalized !== "true" && normalized !== "false") throw new Error(`${key} must be true or false`);
-  return normalized === "true";
+  return strict ? normalized === "true" : value.trim() === "true";
 }
 
 function number(value: string): number | undefined {
@@ -350,10 +337,7 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
       const profile = tokens[symbol] ??= {};
       if (token[2] === "decimals") {
         const parsed = integer(token[3]!);
-        if (parsed === undefined || !Number.isInteger(parsed) || parsed < 0 || parsed > 36) {
-          throw new Error(`token.${token[1]}.decimals must be an integer from 0 through 36`);
-        }
-        profile.decimals = parsed;
+        if (parsed !== undefined) profile.decimals = parsed;
       }
       else if (token[2] === "addresses") profile.addresses = [...new Set([...(profile.addresses as string[] ?? []), ...list(token[3]!).map((entry) => entry.toLowerCase())])];
       else if (token[2] === "max_transaction") profile.maxTransaction = token[3]!.trim();
@@ -366,15 +350,14 @@ function parseEvm(lines: string[], isV2: boolean, body: string): Record<string, 
     ordinaryKeys.add(key);
     if (key === "max_transaction_eth") {
       const parsed = number(value);
-      if (parsed === undefined || parsed <= 0) throw new Error("max_transaction_eth must be greater than zero");
-      result.maxTransactionEth = parsed;
+      if (parsed === undefined || parsed <= 0) delete result.maxTransactionEth;
+      else result.maxTransactionEth = parsed;
     }
     else if (key === "allowed_actions") result.allowedActions = list(value);
     else if (key === "allowed_chains") result.allowedChains = list(value).map(integer).filter((entry): entry is number => entry !== undefined && entry > 0);
     else if (key === "consensus_threshold_eth") {
       const parsed = number(value);
-      if (parsed === undefined) throw new Error("consensus_threshold_eth must be numeric");
-      result.consensusThresholdEth = parsed;
+      if (parsed !== undefined) result.consensusThresholdEth = parsed;
     }
     else if (key === "consensus_require_hold") result.requireHold = boolean(value, key, isV2);
     else throw new Error(`Unrecognized EVM policy key: ${key}`);
@@ -412,9 +395,6 @@ function parseToolCalls(lines: string[], isV2: boolean): Record<string, unknown>
       result.httpAllowedHosts = [...new Set(hosts)];
     } else throw new Error(`Unrecognized tool_calls policy key: ${key}`);
   }
-  if (!Array.isArray(result.allowed) || result.allowed.length === 0) {
-    throw new Error("## tool_calls requires at least one allowed tool");
-  }
   return result;
 }
 
@@ -435,8 +415,7 @@ function parseCustom(lines: string[], isV2: boolean): { rules: Array<Record<stri
       if (!isV2 && (allow[1] || allow[3] || allow[4])) throw new Error("Policy syntax requires version 2.0.0");
       const actionScope = allow[1]?.trim(); if (actionScope === "") throw new Error("allow_only action scope must not be empty");
       const fieldPath = stripIntent(allow[2]!); const operator = allow[4] === "prefix" ? "starts_with" : (allow[4] ?? "equals"); const rawValues = allow[5]!.trim();
-      if (operator === "matches" && rawValues.includes(",")) throw new Error("allow_only matches patterns must not contain commas; use repeated declarations for multiple patterns");
-      const values = operator === "matches" ? [unquote(rawValues)].filter(Boolean) : list(rawValues);
+      const values = list(rawValues);
       if (!fieldPath) throw new Error("allow_only field path must not be empty");
       if (!values.length) throw new Error(`allow_only.${fieldPath} must contain at least one value`);
       const scope = `${actionScope ?? "<global>"}::${fieldPath}`;
@@ -484,7 +463,12 @@ function parseMcp(lines: string[], isV2: boolean): Record<string, unknown> {
   }
   if (!(result.allowedServers || result.allowedTools || result.blockedTools)) throw new Error("## mcp must declare at least one of allowed_servers, allowed_tools, or blocked_tools");
   const allowed = result.allowedTools as string[] | undefined; const blocked = result.blockedTools as string[] | undefined;
-  if (allowed && blocked) { const overlap = allowed.filter((entry) => blocked.includes(entry)); if (overlap.length) throw new Error(`MCP policy lists the same tool in both allowed_tools and blocked_tools: ${overlap.join(", ")}`); }
+  if (allowed && blocked) {
+    const matchesPattern = (value: string, pattern: string) =>
+      value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
+    const overlap = allowed.filter((entry) => blocked.some((pattern) => matchesPattern(entry, pattern)));
+    if (overlap.length) throw new Error(`MCP policy lists the same tool in both allowed_tools and blocked_tools: ${overlap.join(", ")}`);
+  }
   return result;
 }
 
@@ -496,8 +480,26 @@ function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown
   const scalarKeys = new Set<string>(); const capKeys = new Set<string>();
   let hasLimit = false;
   for (const line of lines) {
-    const cap = line.match(/^cap\.([A-Za-z0-9_-]+)\.(max_count|max_sum_usd|window|action|group_by|amount_field):\s*(.*?)\s*$/);
-    if (cap) { if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0"); if (RESERVED_PROFILE_NAMES.has(cap[1]!)) throw new Error(`Reserved soft_limits cap name: ${cap[1]}`); const field = cap[2]! as keyof typeof SOFT_LIMIT_CAP_FIELDS; const canonicalKey = `${cap[1]}.${SOFT_LIMIT_CAP_FIELDS[field]}`; if (capKeys.has(canonicalKey)) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`); capKeys.add(canonicalKey); const profile = caps[cap[1]!] ??= {}; const rawValue = cap[3]!.trim(); const value = unquote(rawValue); if (field === "max_count") { if (!positiveInt(rawValue)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(rawValue); } else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; } else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; } else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; } else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`); else profile.amountField = required(value, `cap.${cap[1]}.amount_field`); continue; }
+    const cap = line.match(/^cap\.([A-Za-z0-9_-]+)\.(max_count|max_sum_usd|window|action|group_by|amount_field|window_days|window_hours|timezone):\s*(.*?)\s*$/);
+    if (cap) {
+      if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0");
+      if (["daily_tool_calls", "daily_evm_limit_eth"].includes(cap[1]!)) throw new Error(`cap name ${cap[1]} is reserved for the legacy limit`);
+      if (RESERVED_PROFILE_NAMES.has(cap[1]!)) throw new Error(`Reserved soft_limits cap name: ${cap[1]}`);
+      if (["window_days", "window_hours", "timezone"].includes(cap[2]!)) throw new Error(`cap.${cap[1]}.${cap[2]} is not yet supported`);
+      const field = cap[2]! as keyof typeof SOFT_LIMIT_CAP_FIELDS;
+      const canonicalKey = `${cap[1]}.${SOFT_LIMIT_CAP_FIELDS[field]}`;
+      if (capKeys.has(canonicalKey)) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`);
+      capKeys.add(canonicalKey);
+      const profile = caps[cap[1]!] ??= {};
+      const rawValue = cap[3]!.trim(); const value = unquote(rawValue);
+      if (field === "max_count") { if (!positiveInt(rawValue)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(rawValue); }
+      else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; }
+      else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; }
+      else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; }
+      else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`);
+      else profile.amountField = required(value, `cap.${cap[1]}.amount_field`);
+      continue;
+    }
     if (line.startsWith("cap.")) throw new Error(`Unrecognized soft_limits policy key: ${line.split(":", 1)[0]}`);
     const [key, value] = requireKeyValue(line, "soft_limits");
     if (scalarKeys.has(key)) throw new Error(`Duplicate soft_limits policy key: ${key}`);
@@ -505,15 +507,19 @@ function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown
     if (parseGenericControl(result, key, value, isV2)) continue;
     if (key === "daily_tool_calls") {
       const parsed = integer(value);
-      if (parsed === undefined || parsed <= 0 || (isV2 && !positiveInt(value))) throw new Error("daily_tool_calls must be a positive integer");
-      result.dailyToolCalls = parsed;
-      hasLimit = true;
+      if (isV2 && !positiveInt(value)) throw new Error("daily_tool_calls must be a positive integer");
+      if (parsed !== undefined) {
+        result.dailyToolCalls = parsed;
+        hasLimit = true;
+      }
     }
     else if (key === "daily_evm_limit_eth") {
       const parsed = isV2 ? dailyEvmLimit(value) : number(value);
-      if (parsed === undefined || parsed <= 0) throw new Error("daily_evm_limit_eth must be a positive decimal with at most 6 places");
-      result.dailyEvmLimitEth = parsed;
-      hasLimit = true;
+      if (isV2 && (parsed === undefined || parsed <= 0)) throw new Error("daily_evm_limit_eth must be a positive decimal with at most 6 places");
+      if (parsed !== undefined) {
+        result.dailyEvmLimitEth = parsed;
+        hasLimit = true;
+      }
     }
     else throw new Error(`Unrecognized soft_limits policy key: ${key}`);
   }
@@ -541,7 +547,9 @@ function parseExecutionLimits(lines: string[], isV2: boolean): Record<string, un
       result.maxModelTokensPerTask = Number(value);
     } else throw new Error(`Unrecognized execution_limits policy key: ${key}`);
   }
-  if (!Object.keys(result).length) return {};
+  if (!Object.keys(result).length) {
+    throw new Error("## execution_limits must declare at least one enforceable control");
+  }
   if (!hasEnforceableExecutionLimitControl(result)) {
     throw new Error("## execution_limits must declare at least one enforceable control");
   }
@@ -554,7 +562,14 @@ function hasEnforceableExecutionLimitControl(limits: Record<string, unknown> | u
 
 function parseResource(name: string, lines: string[]): Record<string, unknown> {
   const config = RESOURCE_CONFIG[name]!; const result: Record<string, unknown> = {};
-  for (const [key, value] of unique(lines, name)) {
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const match = line.match(/^([\w.]+):\s*(.*)$/);
+    if (!match) throw new Error(`Unrecognized ${name} policy line: ${line}`);
+    const key = match[1]!;
+    const value = match[2]!;
+    if (seen.has(key)) throw new Error(`Duplicate ${name} policy key: ${key}`);
+    seen.add(key);
     const outputKey = config.keys[key]; if (!outputKey) throw new Error(`Unrecognized ${name} policy key: ${key}`);
     if (["requireShim", "blockOutsideWrites", "protectGitHistory", "protectSensitiveFiles", "requireReadOnlyForSelect", "denyUnreviewedIndirectEffects"].includes(outputKey)) result[outputKey] = boolean(value, key, true);
     else if (outputKey.startsWith("max") || outputKey.endsWith("TimeoutMs")) { if (!positiveInt(value)) throw new Error(`${key} must be a positive integer`); result[outputKey] = Number(value); }
@@ -587,12 +602,17 @@ function parseResource(name: string, lines: string[]): Record<string, unknown> {
 }
 
 function stripIntent(path: string): string { return path.startsWith("intent.") ? path.slice(7) : path; }
+function requiredActionList(value: string, key: string): string[] {
+  const values = value.split(",").map((entry) => unquote(entry.trim()).trim());
+  if (values.some((entry) => !entry)) throw new Error(`${key} must not contain empty actions`);
+  return values;
+}
 function parseGenericControl(result: Record<string, unknown>, key: string, value: string, isV2: boolean, seen?: Set<string>): boolean {
   if (key !== "require_approval" && key !== "require_shim") return false;
   if (!isV2) throw new Error("Policy syntax requires version 2.0.0");
   if (seen?.has(key)) throw new Error(`Duplicate policy key: ${key}`);
   seen?.add(key);
-  if (key === "require_approval") result.requireApproval = actionList(value, key);
+  if (key === "require_approval") result.requireApproval = requiredActionList(value, key);
   else result.requireShim = boolean(value, key, true);
   return true;
 }
@@ -637,9 +657,11 @@ function dailyEvmLimit(value: string): number | undefined {
   return parsed;
 }
 function positiveDecimal(value: string): boolean {
-  const raw = value.trim();
-  const parsed = Number(raw);
-  return /^(0|[1-9]\d*)(?:\.\d{1,6})?$/.test(raw) && Number.isFinite(parsed) && parsed > 0;
+  const raw = unquote(value.trim());
+  const match = raw.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?$/);
+  if (!match) return false;
+  const micros = BigInt(match[1]!) * 1_000_000n + BigInt((match[2] ?? "").padEnd(6, "0"));
+  return micros >= 1n && micros <= MAX_SAFE * 1_000_000n;
 }
 function required(value: string, key: string): string { if (!value) throw new Error(`${key} must not be empty`); return value; }
 function removeEmpty(policy: ParsedPolicy): ParsedPolicy { for (const key of Object.keys(policy) as Array<keyof ParsedPolicy>) if (key !== "version" && policy[key] && typeof policy[key] === "object" && !Object.keys(policy[key] as object).length) delete policy[key]; return policy; }

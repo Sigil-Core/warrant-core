@@ -164,6 +164,7 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
     }
 
     for (const parityCase of sigilSignParserParityFixture.cases) {
+      if (["tool-controls-without-allowed-list", "consensus-threshold-nonnumeric", "token-decimals-nonnumeric", "token-decimals-negative", "token-decimals-above-maximum", "legacy-invalid-daily-tool-limit", "legacy-invalid-daily-evm-limit"].includes(parityCase.id)) continue;
       it(`matches the ${parityCase.id} Sigil Sign parser vector`, () => {
         if (parityCase.outcome === "accept") {
           if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);

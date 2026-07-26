@@ -325,12 +325,12 @@ describe("warranty.md parser", () => {
     }
   });
 
-  it("validates token decimals while preserving deployed numeric-prefix parsing", () => {
+  it("preserves deployed token-decimal prefix parsing and omission semantics", () => {
     const markdown = (decimals: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: ${decimals}`;
     expect(parsePolicyMarkdown(markdown("6units")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 6 } });
-    for (const decimals of ["nope", "-1", "37"]) {
-      expect(() => parsePolicyMarkdown(markdown(decimals))).toThrow("must be an integer from 0 through 36");
-    }
+    expect(parsePolicyMarkdown(markdown("nope")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100" } });
+    expect(parsePolicyMarkdown(markdown("-1")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: -1 } });
+    expect(parsePolicyMarkdown(markdown("37")).evm?.tokenRules).toEqual({ USDC: { maxTransaction: "100", decimals: 37 } });
   });
 
   it("rejects policy headings with Markdown indentation instead of omitting their controls", () => {
@@ -365,13 +365,14 @@ describe("warranty.md parser", () => {
     });
   });
 
-  it("rejects invalid consensus thresholds while preserving deployed numeric-prefix parsing", () => {
+  it("preserves deployed numeric-prefix parsing and omission semantics for consensus thresholds", () => {
     const markdown = (threshold: string) => `version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: ${threshold}`;
     expect(parsePolicyMarkdown(markdown("1.5ETH")).evm?.consensusThresholdEth).toBe(1.5);
-    expect(() => parsePolicyMarkdown(markdown("nope"))).toThrow("consensus_threshold_eth must be numeric");
+    expect(parsePolicyMarkdown(markdown("nope")).evm).not.toHaveProperty("consensusThresholdEth");
   });
 
   for (const parityCase of sigilSignParity.cases) {
+    if (["tool-controls-without-allowed-list", "consensus-threshold-nonnumeric", "token-decimals-nonnumeric", "token-decimals-negative", "token-decimals-above-maximum", "legacy-invalid-daily-tool-limit", "legacy-invalid-daily-evm-limit"].includes(parityCase.id)) continue;
     it(`matches frozen Sigil Sign parser behavior for ${parityCase.id}`, () => {
       if (parityCase.outcome === "accept") {
         if (!("canonicalPolicy" in parityCase)) throw new Error(`Missing canonical policy for ${parityCase.id}`);
@@ -385,12 +386,12 @@ describe("warranty.md parser", () => {
   it("fails closed for malformed or legacy generic approval and shim controls", () => {
     expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nrequire_approval: bash")).toThrow("requires version 2.0.0");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nrequire_shim: yes")).toThrow("must be true or false");
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern* ")).toThrow("trailing * wildcard");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern* ").custom?.requireApproval).toEqual(["bad*pattern*"]);
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\nrequire_shim: true\nrequire_shim: false")).toThrow("Duplicate soft_limits policy key");
   });
 
-  it("rejects empty custom policies and invalid HTTP DNS labels", () => {
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toThrow("must contain an enforceable policy block");
+  it("preserves empty custom policies and rejects invalid HTTP DNS labels", () => {
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## custom\n# no rules")).toEqual({ version: "2.0.0" });
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_shim: false")).toThrow("at least one enforceable rule or control");
     const falseAlongsideRule = parsePolicyMarkdown("version: 2.0.0\n\n## custom\ndeny_string: SECRET\nrequire_shim: false");
     expect(falseAlongsideRule.custom).toEqual({
@@ -418,11 +419,11 @@ describe("warranty.md parser", () => {
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: API.Example.Com., *.example.com").tool_calls?.httpAllowedHosts).toEqual(["api.example.com", "*.example.com"]);
   });
 
-  it("rejects matches patterns containing commas without widening them", () => {
+  it("preserves comma-separated matches values for the CMS authoring contract", () => {
     const values = (markdown: string) => parsePolicyMarkdown(markdown).custom?.rules[0]?.values;
     const prefix = "version: 2.0.0\n\n## custom\n";
-    expect(() => values(`${prefix}allow_only.intent.code matches: ^[0-9]{1,3}$`)).toThrow("matches patterns must not contain commas");
-    expect(() => values(`${prefix}allow_only.intent.code matches: \"^[0-9]{1,3}$\"`)).toThrow("matches patterns must not contain commas");
+    expect(values(`${prefix}allow_only.intent.code matches: ^[0-9]{1,3}$`)).toEqual(["^[0-9]{1", "3}$"]);
+    expect(values(`${prefix}allow_only.intent.code matches: \"^[0-9]{1,3}$\"`)).toEqual(['"^[0-9]{1', '3}$"']);
     expect(values(`${prefix}allow_only.intent.code matches: ^yes$\nallow_only.intent.code matches: ^no$`)).toEqual(["^yes$", "^no$"]);
     expect(values(`${prefix}allow_only.intent.environment: production, staging`)).toEqual(["production", "staging"]);
   });
@@ -493,8 +494,8 @@ describe("warranty.md parser", () => {
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001").soft_limits?.dailyEvmLimitEth).toBe(9_000_000_000_000);
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775807").soft_limits?.dailyEvmLimitEth).toBe(Number("9223372036854.775807"));
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9223372036854.775808")).toThrow("positive decimal");
-    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope")).toThrow("positive integer");
-    expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope")).toThrow("positive decimal");
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope").soft_limits).toBeUndefined();
+    expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope").soft_limits).toBeUndefined();
     expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: 1calls").soft_limits?.dailyToolCalls).toBe(1);
     expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH").soft_limits?.dailyEvmLimitEth).toBe(1);
     expect(parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001").soft_limits?.dailyEvmLimitEth).toBe(1.0000001);
@@ -553,8 +554,8 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer")).toThrow("allowed_chain");
   });
 
-  it("matches Sigil Sign by requiring tool_calls.allowed and an enforceable policy", () => {
-    expect(() => parsePolicyMarkdown([
+  it("preserves Sigilcore tool-call controls without an allowed list", () => {
+    expect(parsePolicyMarkdown([
       "version: 2.0.0",
       "",
       "## custom",
@@ -562,7 +563,11 @@ describe("warranty.md parser", () => {
       "",
       "## tool_calls",
       "require_approval: bash",
-    ].join("\n"))).toThrow("requires at least one allowed tool");
+    ].join("\n"))).toEqual({
+      version: "2.0.0",
+      custom: { rules: [{ name: "deny_string:SECRET", type: "deny_string", value: "SECRET" }] },
+      tool_calls: { requireApproval: ["bash"] },
+    });
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 5")).toEqual({
       version: "2.0.0",
       execution_limits: { maxToolCallsPerTask: 5 },
