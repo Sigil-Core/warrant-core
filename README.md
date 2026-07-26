@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.1.0
+npm install @sigilcore/warrant-core@0.1.1
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -30,7 +30,7 @@ import {
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. A `matches` declaration carries one comma-free regex value; comma-bearing patterns reject to preserve the frozen Sigil Sign parser boundary. Repeat the declaration to allow multiple patterns. |
+| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, malformed explicit limits, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. Version 0.1.1 intentionally hardens configured numeric safety controls across every supported policy version: malformed or nonpositive transaction, consensus, and daily limits reject rather than silently removing enforcement, and token decimals must be a complete integer from 0 through 36. A `matches` declaration uses the same comma-separated list semantics as Sigilcore's Manual Warrant and Warrant Builder parser. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |
@@ -130,7 +130,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against Sigil Sign production merge `8b55be373c0d2f3a21fc4f5bda761721ff515103`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against Sigil Sign production merge `8b55be373c0d2f3a21fc4f5bda761721ff515103`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this older Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign
@@ -138,19 +138,19 @@ npm run test:sign-parity -- /absolute/path/to/sigil-sign
 
 The gate signs only with the published RFC 8032 test key. It compares all six pinned canonical policies plus the parser edge-case corpus against Sigil Sign's compiled parser. It never reads an operator or production key.
 
-That frozen corpus records legacy parser compatibility behaviors from the pinned Sign parser: decimal fields accept a leading numeric prefix, and chain entries use their leading integer while filtering nonpositive or nonnumeric results. Enforced Policy 2.x soft-limit decimals retain that prefix behavior while checking the exact captured numeric value against the aggregate-counter bound before Number conversion, then applying the deployed parser's normalized six-decimal validation. Treat `parsePolicyMarkdown` as a compatibility parser with explicit hardening, not as a standalone lexical validator. Changing a frozen behavior requires coordinated parser changes, new vectors, and synchronized consumer releases.
+That frozen corpus records legacy parser compatibility behaviors from the pinned Sign parser: ETH amount and consensus threshold fields accept a leading numeric prefix, and chain entries use their leading integer while filtering nonpositive or nonnumeric results. Numeric-prefix ETH parsing is retained for established policy hashes, while a configured nonnumeric or nonpositive limit rejects instead of removing a default or silently omitting enforcement. Token decimals are a deliberate hardening exception: they require a complete integer token from 0 through 36 in Policy 1.x and 2.x. Daily EVM limits retain a nonnumeric suffix compatibility prefix such as `1ETH`, but the numeric prefix itself must use fixed-point notation with at most six decimal places in every supported version. Exponent notation and source overprecision reject before Number conversion. Treat `parsePolicyMarkdown` as a compatibility parser with explicit hardening, not as a standalone lexical validator. Changing a frozen behavior requires coordinated parser changes, new vectors, and synchronized consumer releases.
 
 ## Release and npm trusted publishing
 
 `.github/workflows/publish.yml` publishes only an unpublished stable semantic version whose tag exactly equals `v` plus the package version. Prerelease and build-metadata versions fail before the OIDC publish job. The workflow runs on a GitHub-hosted runner with Node 24, npm 11.5.1 or later, `id-token: write`, and `contents: read`. It tests, builds, packs, and inspects the tarball before `npm publish --access public --provenance`. It fails before publication if that immutable npm version already exists.
 
-The npm package settings do not exist until a package has been published. Bootstrap that one-time dependency without making the first stable release manual:
+The initial npm package bootstrap is complete. The following steps are a non-repeatable historical record:
 
-1. Confirm `package.json` has the exact public `Sigil-Core/warrant-core` `repository.url` before the bootstrap publish.
-2. On an audited bootstrap commit, set the package version to `0.1.0-rc.0`, update the lockfile, and create the non-`v*` Git tag `bootstrap-0.1.0-rc.0`. The tag must not match the release workflow trigger.
-3. Run the full local release checks, create the tarball, and record its SHA-256 in the release evidence.
-4. Authenticate as the approved npm owner in an interactive terminal, then manually publish only the prerelease with `NPM_CONFIG_PROVENANCE=false npm publish --access public --tag bootstrap`. Local machines cannot create npm provenance; this one-time override prevents the package-level provenance setting from blocking the bootstrap. Do not use the `latest` tag.
-5. In the newly available npm package settings, configure a GitHub Actions trusted publisher for organization `Sigil-Core`, repository `warrant-core`, and workflow filename `publish.yml`. Allow `npm publish`.
-6. Make the reviewed stable-version commit with `package.json` and `package-lock.json` set to `0.1.0`, pass CI, and create the exact `v0.1.0` tag. The workflow publishes this first stable version through npm OIDC.
+1. `package.json` was confirmed to contain the exact public `Sigil-Core/warrant-core` `repository.url`.
+2. An audited bootstrap commit set the package version to `0.1.0-rc.0`, updated the lockfile, and created the non-`v*` Git tag `bootstrap-0.1.0-rc.0`, which did not match the release workflow trigger.
+3. The full local release checks ran, the prerelease tarball was created, and its SHA-256 was recorded in the release evidence.
+4. The approved npm owner authenticated in an interactive terminal and published only the prerelease with provenance disabled under the `bootstrap` tag. The publish did not use the `latest` tag.
+5. The npm package settings were configured with the GitHub Actions trusted publisher for organization `Sigil-Core`, repository `warrant-core`, workflow filename `publish.yml`, and the `npm publish` permission.
+6. The reviewed stable `0.1.0` commit set `package.json` and `package-lock.json` to `0.1.0` and used the exact `v0.1.0` tag. The workflow published that immutable first stable version through npm OIDC.
 
-The bootstrap prerelease is the only owner-authenticated publish. Every stable release uses the trusted publisher. The workflow intentionally contains no npm write token. See npm's [trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/) for the current registry requirements.
+Do not repeat the bootstrap or use owner-authenticated publication for a later release. For every later stable release, including `0.1.1`, update the package and lockfile to the exact new version and push the matching `v` tag so the configured trusted publisher runs `.github/workflows/publish.yml`. The workflow intentionally contains no npm write token. See npm's [trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/) for the current registry requirements.

@@ -1,0 +1,217 @@
+{
+  "cases": [
+    {
+      "id": "tool-controls-without-allowed-list",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## tool_calls\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "deny_string:SECRET",
+              "type": "deny_string",
+              "value": "SECRET"
+            }
+          ]
+        },
+        "tool_calls": {
+          "requireApproval": [
+            "bash"
+          ],
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "max-transaction-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nmax_transaction_eth: nope",
+      "outcome": "reject",
+      "errorContains": "max_transaction_eth must be greater than zero"
+    },
+    {
+      "id": "max-transaction-nonpositive",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nmax_transaction_eth: 0",
+      "outcome": "reject",
+      "errorContains": "max_transaction_eth must be greater than zero"
+    },
+    {
+      "id": "max-transaction-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nmax_transaction_eth: 1ETH",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 1,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "consensus-threshold-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: nope",
+      "outcome": "reject",
+      "errorContains": "consensus_threshold_eth must be numeric"
+    },
+    {
+      "id": "consensus-threshold-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: 1.5ETH",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "consensusThresholdEth": 1.5
+        }
+      }
+    },
+    {
+      "id": "consensus-threshold-nonpositive",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: 0",
+      "outcome": "reject",
+      "errorContains": "consensus_threshold_eth must be greater than zero",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "token-decimals-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: 6units",
+      "outcome": "reject",
+      "errorContains": "token.USDC.decimals must be an integer from 0 through 36",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "token-decimals-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: nope",
+      "outcome": "reject",
+      "errorContains": "token.USDC.decimals must be an integer from 0 through 36",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "token-decimals-negative",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: -1",
+      "outcome": "reject",
+      "errorContains": "token.USDC.decimals must be an integer from 0 through 36",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "token-decimals-above-maximum",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: 37",
+      "outcome": "reject",
+      "errorContains": "token.USDC.decimals must be an integer from 0 through 36",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "legacy-token-decimals-nonnumeric",
+      "markdown": "version: 1.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: nope",
+      "outcome": "reject",
+      "errorContains": "token.USDC.decimals must be an integer from 0 through 36"
+    },
+    {
+      "id": "legacy-invalid-daily-tool-limit",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope",
+      "outcome": "reject",
+      "errorContains": "daily_tool_calls must be a positive integer"
+    },
+    {
+      "id": "legacy-invalid-daily-evm-limit",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope",
+      "outcome": "reject",
+      "errorContains": "daily_evm_limit_eth must be a positive decimal with at most 6 places"
+    },
+    {
+      "id": "soft-limit-exponent-notation",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1e-1",
+      "outcome": "reject",
+      "errorContains": "daily_evm_limit_eth must be a positive decimal with at most 6 places",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "soft-limit-below-bound-source-overprecision",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001",
+      "outcome": "reject",
+      "errorContains": "daily_evm_limit_eth must be a positive decimal with at most 6 places",
+      "versions": [
+        "1.0.0",
+        "2.0.0",
+        "2.1.0"
+      ]
+    },
+    {
+      "id": "legacy-daily-evm-limit-precision",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001",
+      "outcome": "reject",
+      "errorContains": "daily_evm_limit_eth must be a positive decimal with at most 6 places"
+    },
+    {
+      "id": "root-cap-window-days",
+      "markdown": "version: 2.0.0\ncap.requests.window_days: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject",
+      "errorContains": "must be inside a policy block"
+    },
+    {
+      "id": "root-cap-window-hours",
+      "markdown": "version: 2.0.0\ncap.requests.window_hours: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject",
+      "errorContains": "must be inside a policy block"
+    },
+    {
+      "id": "root-cap-timezone",
+      "markdown": "version: 2.0.0\ncap.requests.timezone: UTC\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject",
+      "errorContains": "must be inside a policy block"
+    },
+    {
+      "id": "section-cap-window-days",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.window_days: 1",
+      "outcome": "reject",
+      "errorContains": "cap.requests.window_days is not yet supported"
+    },
+    {
+      "id": "section-cap-window-hours",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.window_hours: 1",
+      "outcome": "reject",
+      "errorContains": "cap.requests.window_hours is not yet supported"
+    },
+    {
+      "id": "section-cap-timezone",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.timezone: UTC",
+      "outcome": "reject",
+      "errorContains": "cap.requests.timezone is not yet supported"
+    }
+  ]
+}
