@@ -1,0 +1,130 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-${{ github.repository }}
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  verify-tag:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - id: version
+        name: Match the tag to package.json
+        run: node scripts/verify-release-tag.mjs
+
+  publish:
+    name: Publish ${{ needs.verify-tag.outputs.version }}
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Require the npm trusted-publishing runtime
+        run: |
+          node --input-type=module -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 14)) process.exit(1)"
+          npm install --global npm@11.5.1
+          node --input-type=module -e "const { execFileSync } = await import('node:child_process'); const [major, minor, patch] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number); if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) process.exit(1)"
+      - name: Refuse to republish an immutable npm version
+        run: |
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+          set +e
+          lookup_output="$(npm view "$package_name@$package_version" version --registry=https://registry.npmjs.org 2>&1)"
+          lookup_status=$?
+          set -e
+          if [ "$lookup_status" -eq 0 ]; then
+            echo "Refusing to republish existing npm version $package_name@$package_version" >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$lookup_output" | grep -Eq 'npm (error|ERR!) code E404'; then
+            printf '%s\n' "$lookup_output" >&2
+            echo "Unable to confirm that npm version $package_name@$package_version is unpublished" >&2
+            exit "$lookup_status"
+          fi
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:node
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run test:workers
+      - run: npm run build
+      - name: Pack and inspect the public artifact
+        run: |
+          npm pack --json > npm-pack.json
+          package_tgz="$(node --input-type=module -e "const pack = JSON.parse(await (await import('node:fs/promises')).readFile('npm-pack.json', 'utf8')); process.stdout.write(pack[0].filename)")"
+          tar -tzf "$package_tgz" | sort | tee package-files.txt
+          diff -u <(printf '%s\n' \
+            package/LICENSE \
+            package/README.md \
+            package/dist/canonical.d.ts \
+            package/dist/canonical.d.ts.map \
+            package/dist/canonical.js \
+            package/dist/canonical.js.map \
+            package/dist/commitment.d.ts \
+            package/dist/commitment.d.ts.map \
+            package/dist/commitment.js \
+            package/dist/commitment.js.map \
+            package/dist/crypto/browser.d.ts \
+            package/dist/crypto/browser.d.ts.map \
+            package/dist/crypto/browser.js \
+            package/dist/crypto/browser.js.map \
+            package/dist/crypto/node.d.ts \
+            package/dist/crypto/node.d.ts.map \
+            package/dist/crypto/node.js \
+            package/dist/crypto/node.js.map \
+            package/dist/crypto/webcrypto.d.ts \
+            package/dist/crypto/webcrypto.d.ts.map \
+            package/dist/crypto/webcrypto.js \
+            package/dist/crypto/webcrypto.js.map \
+            package/dist/crypto/workers.d.ts \
+            package/dist/crypto/workers.d.ts.map \
+            package/dist/crypto/workers.js \
+            package/dist/crypto/workers.js.map \
+            package/dist/html-comments.d.ts \
+            package/dist/html-comments.d.ts.map \
+            package/dist/html-comments.js \
+            package/dist/html-comments.js.map \
+            package/dist/index.d.ts \
+            package/dist/index.d.ts.map \
+            package/dist/index.js \
+            package/dist/index.js.map \
+            package/dist/policy.d.ts \
+            package/dist/policy.d.ts.map \
+            package/dist/policy.js \
+            package/dist/policy.js.map \
+            package/dist/signature.d.ts \
+            package/dist/signature.d.ts.map \
+            package/dist/signature.js \
+            package/dist/signature.js.map \
+            package/dist/types.d.ts \
+            package/dist/types.d.ts.map \
+            package/dist/types.js \
+            package/dist/types.js.map \
+            package/package.json) \
+            <(tar -tzf "$package_tgz" | sort)
+      - name: Publish with npm trusted publishing
+        run: npm publish --access public --provenance

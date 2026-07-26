@@ -1,0 +1,36 @@
+{
+  "format": "sigil-warrant-generic-control-parity/v1",
+  "source": "sigil-sign/src/lex/parser.ts generic require_approval and require_shim fields",
+  "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nrequire_approval: wallet.transfer\nrequire_shim: true\n\n## tool_calls\nallowed: bash\nrequire_approval: bash.exec\nrequire_shim: false\n\n## custom\nrequire_approval: intent.review\nrequire_shim: true\ndeny_string: BLOCK\n\n## soft_limits\ndaily_tool_calls: 1\nrequire_approval: soft.limit\nrequire_shim: false\n\n## execution_limits\nmax_tool_calls_per_task: 1\nrequire_approval: task.execute\nrequire_shim: true",
+  "canonicalPolicy": {
+    "version": "2.0.0",
+    "evm": {
+      "maxTransactionEth": 5,
+      "allowedActions": ["wallet.transfer"],
+      "allowedChains": [1],
+      "requireApproval": ["wallet.transfer"],
+      "requireShim": true
+    },
+    "tool_calls": {
+      "allowed": ["bash"],
+      "requireApproval": ["bash.exec"],
+      "requireShim": false
+    },
+    "custom": {
+      "rules": [{"name": "deny_string:BLOCK", "type": "deny_string", "value": "BLOCK"}],
+      "requireApproval": ["intent.review"],
+      "requireShim": true
+    },
+    "soft_limits": {
+      "dailyToolCalls": 1,
+      "requireApproval": ["soft.limit"],
+      "requireShim": false
+    },
+    "execution_limits": {
+      "maxToolCallsPerTask": 1,
+      "requireApproval": ["task.execute"],
+      "requireShim": true
+    }
+  },
+  "canonicalPolicyJson": "{\"custom\":{\"requireApproval\":[\"intent.review\"],\"requireShim\":true,\"rules\":[{\"name\":\"deny_string:BLOCK\",\"type\":\"deny_string\",\"value\":\"BLOCK\"}]},\"evm\":{\"allowedActions\":[\"wallet.transfer\"],\"allowedChains\":[1],\"maxTransactionEth\":5,\"requireApproval\":[\"wallet.transfer\"],\"requireShim\":true},\"execution_limits\":{\"maxToolCallsPerTask\":1,\"requireApproval\":[\"task.execute\"],\"requireShim\":true},\"soft_limits\":{\"dailyToolCalls\":1,\"requireApproval\":[\"soft.limit\"],\"requireShim\":false},\"tool_calls\":{\"allowed\":[\"bash\"],\"requireApproval\":[\"bash.exec\"],\"requireShim\":false},\"version\":\"2.0.0\"}"
+}

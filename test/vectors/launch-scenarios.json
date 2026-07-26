@@ -1,0 +1,320 @@
+{
+  "format": "sigil-proving-ground-launch-scenarios/v1",
+  "sourcePolicyCommit": "b0594076478c9ebc5c38f6f861412748cf37ef3d",
+  "commitmentProfile": "pg-commit-v1",
+  "intentCommitmentScope": "The exact submitted request.intent object before Sigil Sign derives HTTP host, path, and query fields.",
+  "resolvedFixtureDependencies": {
+    "outbound-email-agent": {
+      "api.crm.example.com": "crm.proving-ground.invalid",
+      "all-staff@yourcompany.example.com": "all-staff@proving-ground.invalid",
+      "everyone@yourcompany.example.com": "everyone@proving-ground.invalid",
+      "*@internal.yourcompany.example.com": "*@internal.proving-ground.invalid"
+    }
+  },
+  "vectors": [
+    {
+      "id": "defi-approved-usdc-0-1",
+      "templateId": "defi-agent",
+      "scenarioId": "swap-under-cap",
+      "endpoint": "/v1/authorize",
+      "signedClearance": true,
+      "expected": {
+        "status": "APPROVED",
+        "matchedRule": null,
+        "errorCode": null
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "chainId": 1,
+        "txCommit": "b95279c0f7cd0496890c69c236e348ed6e9f5cff9aa04af54d4249eba71f3bf8",
+        "intent": {
+          "action": "contract.call",
+          "targetAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amount": "0.1",
+          "token": "USDC",
+          "metadata": {
+            "job_type": "rebalance"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"contract.call\",\"amount\":\"0.1\",\"metadata\":{\"job_type\":\"rebalance\"},\"targetAddress\":\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"token\":\"USDC\"}",
+      "txCommitSha256": "b95279c0f7cd0496890c69c236e348ed6e9f5cff9aa04af54d4249eba71f3bf8",
+      "observedEvaluator": {
+        "decision": "APPROVED",
+        "violatedRule": null,
+        "lexErrorCode": null
+      }
+    },
+    {
+      "id": "defi-denied-usdc-over-cap",
+      "templateId": "defi-agent",
+      "scenarioId": "swap-over-token-cap",
+      "endpoint": "/v1/authorize/test-run",
+      "signedClearance": false,
+      "expected": {
+        "status": "DENIED",
+        "matchedRule": "evm.tokenRules.USDC.maxTransaction",
+        "errorCode": "SIGIL_POLICY_VIOLATION_TOKEN_AMOUNT_EXCEEDED"
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "chainId": 1,
+        "txCommit": "8b24967aff035cd5c1bba93008f5fb3b5ab2ceef471d957151c247e20e78756c",
+        "intent": {
+          "action": "contract.call",
+          "targetAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amount": "10000.000001",
+          "token": "USDC",
+          "metadata": {
+            "job_type": "rebalance"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"contract.call\",\"amount\":\"10000.000001\",\"metadata\":{\"job_type\":\"rebalance\"},\"targetAddress\":\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"token\":\"USDC\"}",
+      "txCommitSha256": "8b24967aff035cd5c1bba93008f5fb3b5ab2ceef471d957151c247e20e78756c",
+      "observedEvaluator": {
+        "decision": "DENIED",
+        "violatedRule": "evm.tokenRules.USDC.maxTransaction",
+        "lexErrorCode": "LEX_AMOUNT_EXCEEDS_TOKEN_LIMIT"
+      }
+    },
+    {
+      "id": "defi-denied-sanctioned-address",
+      "templateId": "defi-agent",
+      "scenarioId": "transfer-sanctioned-address",
+      "endpoint": "/v1/authorize/test-run",
+      "signedClearance": false,
+      "expected": {
+        "status": "DENIED",
+        "matchedRule": "deny_if.targetAddress.equals:0x722122df12d4e14e13ac3b6895a86e84145b6967",
+        "errorCode": "SIGIL_POLICY_VIOLATION_CUSTOM_RULE"
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "chainId": 1,
+        "txCommit": "ca00617ff1bb0aa93c61789b9d9c32c431ef404b61fd1f18f05e6f15729654d8",
+        "intent": {
+          "action": "wallet.transfer",
+          "targetAddress": "0x722122df12d4e14e13ac3b6895a86e84145b6967",
+          "amount": "0.1",
+          "token": "USDC",
+          "metadata": {
+            "job_type": "rebalance"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"wallet.transfer\",\"amount\":\"0.1\",\"metadata\":{\"job_type\":\"rebalance\"},\"targetAddress\":\"0x722122df12d4e14e13ac3b6895a86e84145b6967\",\"token\":\"USDC\"}",
+      "txCommitSha256": "ca00617ff1bb0aa93c61789b9d9c32c431ef404b61fd1f18f05e6f15729654d8",
+      "observedEvaluator": {
+        "decision": "DENIED",
+        "violatedRule": "deny_if.targetAddress.equals:0x722122df12d4e14e13ac3b6895a86e84145b6967",
+        "lexErrorCode": "LEX_CUSTOM_RULE_VIOLATION"
+      }
+    },
+    {
+      "id": "repository-approved-public-docs-fetch",
+      "templateId": "claude-code-agent",
+      "scenarioId": "fetch-public-docs",
+      "endpoint": "/v1/authorize",
+      "signedClearance": true,
+      "expected": {
+        "status": "APPROVED",
+        "matchedRule": null,
+        "errorCode": null
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "txCommit": "4bd13daa689631ce8724bb84ee9171be25e3e1606f569da8413c768758bb4ce5",
+        "intent": {
+          "action": "web_fetch",
+          "url": "https://docs.sigilcore.com/getting-started",
+          "metadata": {
+            "job_type": "documentation"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"web_fetch\",\"metadata\":{\"job_type\":\"documentation\"},\"url\":\"https://docs.sigilcore.com/getting-started\"}",
+      "txCommitSha256": "4bd13daa689631ce8724bb84ee9171be25e3e1606f569da8413c768758bb4ce5",
+      "observedEvaluator": {
+        "decision": "APPROVED",
+        "violatedRule": null,
+        "lexErrorCode": null
+      }
+    },
+    {
+      "id": "repository-denied-rm-rf",
+      "templateId": "claude-code-agent",
+      "scenarioId": "bash-rm-rf",
+      "endpoint": "/v1/authorize/test-run",
+      "signedClearance": false,
+      "expected": {
+        "status": "DENIED",
+        "matchedRule": "execution.boundary",
+        "errorCode": "SIGIL_POLICY_VIOLATION_EXECUTION_BOUNDARY_REQUIRED"
+      },
+      "expectedPrecedence": {
+        "evaluatedRule": "execution.boundary",
+        "declaredButPreemptedRule": "bash.blocked_commands: rm -rf"
+      },
+      "behaviorNote": "Current Policy 2.1 repository filesystem boundary denies before legacy bash.blocked_commands is evaluated.",
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "txCommit": "e34c10ed157852f831a1e3a2c1ff401273cee099979f6e20a1aac815c95008c6",
+        "intent": {
+          "action": "bash",
+          "command": "rm -rf /tmp/proving-ground-scratch",
+          "metadata": {
+            "job_type": "test_run"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"bash\",\"command\":\"rm -rf /tmp/proving-ground-scratch\",\"metadata\":{\"job_type\":\"test_run\"}}",
+      "txCommitSha256": "e34c10ed157852f831a1e3a2c1ff401273cee099979f6e20a1aac815c95008c6",
+      "observedEvaluator": {
+        "decision": "DENIED",
+        "violatedRule": "execution.boundary",
+        "lexErrorCode": "LEX_POLICY_VIOLATION_EXECUTION_BOUNDARY_REQUIRED"
+      }
+    },
+    {
+      "id": "repository-denied-dotenv-write",
+      "templateId": "claude-code-agent",
+      "scenarioId": "write-dotenv",
+      "endpoint": "/v1/authorize/test-run",
+      "signedClearance": false,
+      "expected": {
+        "status": "DENIED",
+        "matchedRule": "deny_if.path.contains:.env",
+        "errorCode": "SIGIL_POLICY_VIOLATION_CUSTOM_RULE"
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "txCommit": "c0bc880f2b34b36413b93df2a4e0edff1f0965e6c6d791af755112738250f547",
+        "intent": {
+          "action": "file_write",
+          "path": ".env",
+          "metadata": {
+            "job_type": "test_run"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"file_write\",\"metadata\":{\"job_type\":\"test_run\"},\"path\":\".env\"}",
+      "txCommitSha256": "c0bc880f2b34b36413b93df2a4e0edff1f0965e6c6d791af755112738250f547",
+      "observedEvaluator": {
+        "decision": "DENIED",
+        "violatedRule": "deny_if.path.contains:.env",
+        "lexErrorCode": "LEX_CUSTOM_RULE_VIOLATION"
+      }
+    },
+    {
+      "id": "email-approved-crm-get",
+      "templateId": "outbound-email-agent",
+      "scenarioId": "crm-lookup",
+      "endpoint": "/v1/authorize",
+      "signedClearance": true,
+      "expected": {
+        "status": "APPROVED",
+        "matchedRule": null,
+        "errorCode": null
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "txCommit": "cc45ea5551ed389d6b29d341207f36593c1aa6619b10cc8684e7841fcc557a7a",
+        "intent": {
+          "action": "http",
+          "method": "GET",
+          "url": "https://crm.proving-ground.invalid/v1/contacts?email=prospect%40proving-ground.invalid",
+          "metadata": {
+            "campaign": "proving-ground-launch",
+            "job_type": "prospect_outreach"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"http\",\"metadata\":{\"campaign\":\"proving-ground-launch\",\"job_type\":\"prospect_outreach\"},\"method\":\"GET\",\"url\":\"https://crm.proving-ground.invalid/v1/contacts?email=prospect%40proving-ground.invalid\"}",
+      "txCommitSha256": "cc45ea5551ed389d6b29d341207f36593c1aa6619b10cc8684e7841fcc557a7a",
+      "observedEvaluator": {
+        "decision": "APPROVED",
+        "violatedRule": null,
+        "lexErrorCode": null
+      }
+    },
+    {
+      "id": "email-pending-prospect-send",
+      "templateId": "outbound-email-agent",
+      "scenarioId": "send-prospect",
+      "endpoint": "/v1/authorize/test-run",
+      "signedClearance": false,
+      "expected": {
+        "status": "PENDING",
+        "matchedRule": "tool_calls.emailRequireApproval",
+        "errorCode": "SIGIL_POLICY_HOLD_APPROVAL_REQUIRED"
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "txCommit": "35e78e40baad5bb2a981d41b3da3c96e690cb602b3f8284ccb2729f79a1d2699",
+        "intent": {
+          "action": "email.send",
+          "to": "prospect@proving-ground.invalid",
+          "metadata": {
+            "campaign": "proving-ground-launch",
+            "job_type": "prospect_outreach"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"email.send\",\"metadata\":{\"campaign\":\"proving-ground-launch\",\"job_type\":\"prospect_outreach\"},\"to\":\"prospect@proving-ground.invalid\"}",
+      "txCommitSha256": "35e78e40baad5bb2a981d41b3da3c96e690cb602b3f8284ccb2729f79a1d2699",
+      "observedEvaluator": {
+        "decision": "PENDING",
+        "violatedRule": "tool_calls.emailRequireApproval",
+        "lexErrorCode": "LEX_TOOL_CALL_REQUIRES_APPROVAL"
+      }
+    },
+    {
+      "id": "email-denied-internal-broadcast",
+      "templateId": "outbound-email-agent",
+      "scenarioId": "send-internal-broadcast",
+      "endpoint": "/v1/authorize/test-run",
+      "signedClearance": false,
+      "expected": {
+        "status": "DENIED",
+        "matchedRule": "tool_calls.emailBlockedRecipients: all-staff@proving-ground.invalid",
+        "errorCode": "SIGIL_POLICY_VIOLATION_BLOCKED_RECIPIENT"
+      },
+      "request": {
+        "agentId": "demo-agent",
+        "framework": "demo",
+        "txCommit": "f3b32a3635ca656a7b5d7b729ef9581e1d534fc2621bb7c631b1e2fce527fab6",
+        "intent": {
+          "action": "email.send",
+          "to": "all-staff@proving-ground.invalid",
+          "metadata": {
+            "campaign": "proving-ground-launch",
+            "job_type": "prospect_outreach"
+          }
+        }
+      },
+      "canonicalIntentJson": "{\"action\":\"email.send\",\"metadata\":{\"campaign\":\"proving-ground-launch\",\"job_type\":\"prospect_outreach\"},\"to\":\"all-staff@proving-ground.invalid\"}",
+      "txCommitSha256": "f3b32a3635ca656a7b5d7b729ef9581e1d534fc2621bb7c631b1e2fce527fab6",
+      "observedEvaluator": {
+        "decision": "DENIED",
+        "violatedRule": "tool_calls.emailBlockedRecipients: all-staff@proving-ground.invalid",
+        "lexErrorCode": "LEX_TOOL_CALL_BLOCKED_RECIPIENT"
+      }
+    }
+  ],
+  "evaluatorValidation": {
+    "sigilSignCommit": "53b891e",
+    "parser": "parseWarrantyContent",
+    "evaluator": "evaluateStrict",
+    "materialization": "Every pinned template body was signed with the RFC 8032 Test 1 test-only Ed25519 key. Outbound Email then applied the approved proving-ground resolution map before evaluation.",
+    "verifiedOn": "2026-07-25"
+  }
+}

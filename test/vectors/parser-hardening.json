@@ -1,0 +1,243 @@
+{
+  "format": "warrant-core-parser-hardening/v1",
+  "cases": [
+    {
+      "id": "duplicate-normalized-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\n  \"1\": contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-policy-heading",
+      "markdown": "version: 2.0.0\n\n ## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-ordinary-evm-key",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_actions: contract.call\nallowed_chains: 1",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-chain-actions-header",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nchain_actions:\n  8453: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-token-scalar",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200",
+      "outcome": "reject"
+    },
+    {
+      "id": "unindented-unquoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unindented-quoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n\"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "custom-false-shim-only",
+      "markdown": "version: 2.0.0\n\n## custom\nrequire_shim: false",
+      "outcome": "reject"
+    },
+    {
+      "id": "custom-false-shim-with-rule",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\nrequire_shim: false",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "deny_string:SECRET",
+              "type": "deny_string",
+              "value": "SECRET"
+            }
+          ],
+          "requireShim": false
+        }
+      }
+    },
+    {
+      "id": "custom-false-shim-with-approval",
+      "markdown": "version: 2.0.0\n\n## custom\nrequire_approval: bash\nrequire_shim: false",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [],
+          "requireApproval": [
+            "bash"
+          ],
+          "requireShim": false
+        }
+      }
+    },
+    {
+      "id": "policy-2-crlf",
+      "markdown": "version: 2.0.0\r\n\r\n## tool_calls\r\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "signed-policy-2-1-crlf",
+      "markdown": "version: 2.1.0\r\n\r\n## repository\r\nroots: .\r\nblock_outside_writes: true\r\nprotect_git_history: true\r\nprotect_sensitive_files: true\r\ngit_providers: github\r\nrequire_shim: true\r\n\r\n## signature\r\nsigil-sig: abc_DEF-123\r\n",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.1.0",
+        "repository": {
+          "roots": [
+            "."
+          ],
+          "blockOutsideWrites": true,
+          "protectGitHistory": true,
+          "protectSensitiveFiles": true,
+          "gitProviders": [
+            "github"
+          ],
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "root-generic-approval-control",
+      "markdown": "version: 2.0.0\nrequire_approval: bash\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-execution-limits-heading-in-root-preamble",
+      "markdown": "version: 2.0.0\n\n ## execution_limits\nmax_tool_calls_per_task: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "root-execution-limit-control",
+      "markdown": "version: 2.0.0\nmax_tool_calls_per_task: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "root-resource-security-control",
+      "markdown": "version: 2.0.0\nprotect_git_history: true\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "root-policy-looking-documentation",
+      "markdown": "# Warrant policy\nVersioning: draft\nSession: current\nNote: require_shim belongs in a policy block.\n# require_shim: true\n> require_approval: bash\n<!-- max_tool_calls_per_task: 1 -->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "policy-2-1-empty-filesystem-protected-classes",
+      "markdown": "version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: /workspace\nread_roots: /workspace\nallowed_effects: overwrite\nprotected_file_classes: ,\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2-1-empty-git-approval",
+      "markdown": "version: 2.1.0\n\n## git\nactions: git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https\nallowed_operations: push_fast_forward\nrequire_approval: ,\nblocked_operations: force_push\nprotected_refs: refs/heads/main\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2-1-empty-database-approval",
+      "markdown": "version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nrequire_approval: ,\nallowed_resources: public.*\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "matches-regex-with-unquoted-comma",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: ^[0-9]{1,3}$",
+      "outcome": "reject"
+    },
+    {
+      "id": "matches-regex-with-quoted-comma",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: \"^[0-9]{1,3}$\"",
+      "outcome": "reject"
+    },
+    {
+      "id": "multiple-matches-patterns-use-repeated-declarations",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.code matches: ^yes$\nallow_only.intent.code matches: ^no$",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "allow_only.code",
+              "type": "allow_field",
+              "fieldPath": "code",
+              "operator": "matches",
+              "values": [
+                "^yes$",
+                "^no$"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "standalone-html-comment-closer-is-policy-text",
+      "markdown": "version: 2.0.0\n\n<!-- deny_string: HIDDEN -->\n## custom\ndeny_string: -->",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "custom": {
+          "rules": [
+            {
+              "name": "deny_string:-->",
+              "type": "deny_string",
+              "value": "-->"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "standalone-comment-closer-before-unclosed-opener",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: -->\n<!-- unclosed",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-daily-tool-calls-weaker-then-stronger",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 1\ndaily_tool_calls: 100",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-daily-tool-calls-stronger-then-weaker",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 100\ndaily_tool_calls: 1",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-daily-evm-limit",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 0.1\ndaily_evm_limit_eth: 1000",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-cap-max-count",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: 1\ncap.requests.max_count: 100\ncap.requests.window: day\ncap.requests.action: email.send",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-cap-group-by",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: 1\ncap.requests.window: day\ncap.requests.action: email.send\ncap.requests.group_by: metadata.first\ncap.requests.group_by: metadata.second",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-soft-limit-generic-control",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 1\nrequire_approval: bash\nrequire_approval: email.send",
+      "outcome": "reject"
+    }
+  ]
+}

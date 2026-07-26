@@ -1,0 +1,912 @@
+{
+  "format": "sigil-sign-parser-parity/v1",
+  "sigilSignCommit": "8b55be373c0d2f3a21fc4f5bda761721ff515103",
+  "cases": [
+    {
+      "id": "evm-default-max-transaction",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "execution-controls-without-numeric-limit",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: bash\n\n## execution_limits\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        },
+        "execution_limits": {
+          "requireApproval": [
+            "bash"
+          ],
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "execution-approval-only-control",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_approval: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "execution_limits": {
+          "requireApproval": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "execution-shim-only-control",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "execution_limits": {
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "execution-false-shim-with-approval",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_approval: bash\nrequire_shim: false",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "execution_limits": {
+          "requireApproval": [
+            "bash"
+          ],
+          "requireShim": false
+        }
+      }
+    },
+    {
+      "id": "execution-false-shim-with-numeric-limit",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 1\nrequire_shim: false",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "execution_limits": {
+          "maxToolCallsPerTask": 1,
+          "requireShim": false
+        }
+      }
+    },
+    {
+      "id": "execution-false-shim-only",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_shim: false",
+      "outcome": "reject"
+    },
+    {
+      "id": "soft-limit-controls-without-enforced-limit",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## soft_limits\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "soft-limit-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 1ETH",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "dailyEvmLimitEth": 1
+        }
+      }
+    },
+    {
+      "id": "soft-limit-quoted-number",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: \"1\"",
+      "outcome": "reject"
+    },
+    {
+      "id": "soft-limit-below-bound-source-overprecision",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 9000000000000.0000001",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "dailyEvmLimitEth": 9000000000000
+        }
+      }
+    },
+    {
+      "id": "legacy-invalid-daily-tool-limit",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "legacy-invalid-daily-evm-limit",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "legacy-daily-tool-limit-prefix",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_tool_calls: 1calls",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "1.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        },
+        "soft_limits": {
+          "dailyToolCalls": 1
+        }
+      }
+    },
+    {
+      "id": "legacy-daily-evm-limit-precision",
+      "markdown": "version: 1.0.0\n\n## tool_calls\nallowed: bash\n\n## soft_limits\ndaily_evm_limit_eth: 1.0000001",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "1.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        },
+        "soft_limits": {
+          "dailyEvmLimitEth": 1.0000001
+        }
+      }
+    },
+    {
+      "id": "reserved-soft-limit-cap-name",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.__proto__.max_count: 1\ncap.__proto__.window: day\ncap.__proto__.action: email.send",
+      "outcome": "reject"
+    },
+    {
+      "id": "inherited-soft-limit-cap-name",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.toString.max_count: 1\ncap.toString.window: day\ncap.toString.action: email.send",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "caps": {
+            "toString": {
+              "maxCount": 1,
+              "window": "day",
+              "action": "email.send"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "quoted-soft-limit-max-count",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: \"1\"\ncap.requests.window: day\ncap.requests.action: email.send",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-soft-limit-max-sum",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.budget.max_sum_usd: \"1.25\"\ncap.budget.window: day\ncap.budget.action: email.send\ncap.budget.amount_field: amount_usd",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "soft_limits": {
+          "caps": {
+            "budget": {
+              "maxSumUsd": "1.25",
+              "window": "day",
+              "action": "email.send",
+              "amountField": "amount_usd"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "execution-limit-zero",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## execution_limits\nmax_tool_calls_per_task: 0",
+      "outcome": "reject"
+    },
+    {
+      "id": "execution-limit-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## execution_limits\nmax_tool_calls_per_task: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-controls-without-required-fields",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## evm\nrequire_approval: wallet.transfer\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-missing-allowed-chains",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## evm\nallowed_actions: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "tool-controls-without-allowed-list",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: SECRET\n\n## tool_calls\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "execution-limit-is-root-enforcement",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 5",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "execution_limits": {
+          "maxToolCallsPerTask": 5
+        }
+      }
+    },
+    {
+      "id": "evm-max-transaction-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nmax_transaction_eth: 1ETH\nallowed_actions: wallet.transfer\nallowed_chains: 1",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 1,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "evm-chain-numeric-prefixes-and-nonpositive-filtering",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1-mainnet, 1.5, 0, -1",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "evm-invalid-chain-entry-filtering",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1, nope",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "evm-generic-controls-after-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1, 8453\nchain_actions:\n  \"1\": wallet.transfer\n  \"8453\": contract.call\n  require_approval: wallet.transfer\n  require_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer",
+            "contract.call"
+          ],
+          "allowedChains": [
+            1,
+            8453
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ],
+            "8453": [
+              "contract.call"
+            ]
+          },
+          "requireApproval": [
+            "wallet.transfer"
+          ],
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "evm-unindented-control-terminates-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\nrequire_approval: wallet.transfer",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "*"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          },
+          "requireApproval": [
+            "wallet.transfer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "evm-dangling-chain-action-after-boundary",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\nrequire_approval: wallet.transfer\n  \"1\": *",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-dangling-chain-action-after-indented-approval",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_approval: wallet.transfer\n  \"1\": *",
+      "outcome": "reject"
+    },
+    {
+      "id": "evm-dangling-chain-action-after-indented-shim",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: *\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  require_shim: true\n  \"1\": *",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-root-version",
+      "markdown": "  version: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "root-documentation-and-commented-header",
+      "markdown": "# Warranty Policy\nNote: copy this policy before use.\n> documentation\n<!--\n## notes\nmetadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "misspelled-root-version",
+      "markdown": "versoin: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "misspelled-root-version-equals",
+      "markdown": "versoin=2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "misspelled-root-version-whitespace",
+      "markdown": "versoin 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-root-version",
+      "markdown": "version:\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "spaced-colon-root-version",
+      "markdown": "version : 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "equals-root-version",
+      "markdown": "version=2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "punctuated-root-version",
+      "markdown": "version--: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "punctuated-space-root-version",
+      "markdown": "version-- 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "spaced-punctuation-root-version",
+      "markdown": "version .: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "list-root-version",
+      "markdown": "- version: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "blockquote-root-version",
+      "markdown": "> version: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-root-version",
+      "markdown": "version: 2.0.0\nVersion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "invalid-semver-root-version",
+      "markdown": "version: 2.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2-email-invalid-approval-boolean",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: email.send\nemail.require_approval: maybe",
+      "outcome": "reject"
+    },
+    {
+      "id": "ordinary-root-prose-keys",
+      "markdown": "Versioning: draft\nSession: current\nVersions vary between deployments.\nVersions 2 and 3 are supported.\nversion: 2.0.0\n\n## tool_calls\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "legacy-unknown-custom-rule",
+      "markdown": "## tool_calls\nallowed: bash\n\n## custom\ndeny_strng: SECRET",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-custom-with-enforceable-tool-policy",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: bash\n\n## custom\n# no rules",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trailing-dot-http-host-normalization",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: API.Example.Com., *.example.com",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "http"
+          ],
+          "httpAllowedHosts": [
+            "api.example.com",
+            "*.example.com"
+          ]
+        }
+      }
+    },
+    {
+      "id": "invalid-empty-http-host-label",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: api..example.com",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2.1-empty-required-resource-list",
+      "markdown": "version: 2.1.0\n\n## filesystem\nactions:\nwrite_roots: .\nread_roots: .\nallowed_effects: read\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2.1-complete-resource-profile",
+      "markdown": "version: 2.1.0\n\n## repository\nroots: .\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: github\nrequire_shim: true\n\n## filesystem\nactions: filesystem.read, filesystem.write\nwrite_roots: /workspace\nread_roots: ., /workspace\nallowed_effects: read, overwrite\nblocked_paths: .env*\nprotected_file_classes: credentials\nprotected_class_catalog: catalog-v1\nprotected_effects: overwrite, delete\nmax_files_per_action: 10\nrequire_shim: true\n\n## git\nactions: git.status, git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https, ssh\nallowed_operations: status, push_fast_forward, force_push\nrequire_approval: force_push\nblocked_operations: force_push\nprotected_refs: refs/heads/main, refs/tags/*\nmax_ref_changes_per_task: 2\nrequire_shim: true\n\n## database\nactions: database.query, database.write\nprotected_environments: production\nallowed_operations: select, update\nrequire_approval: update\nallowed_resources: public.*, audit.log\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nmax_schema_changes_per_task: 1\nstatement_timeout_ms: 5000\nlock_timeout_ms: 1000\nrequire_shim: true",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.1.0",
+        "repository": {
+          "roots": [
+            "."
+          ],
+          "blockOutsideWrites": true,
+          "protectGitHistory": true,
+          "protectSensitiveFiles": true,
+          "gitProviders": [
+            "github"
+          ],
+          "requireShim": true
+        },
+        "filesystem": {
+          "actions": [
+            "filesystem.read",
+            "filesystem.write"
+          ],
+          "writeRoots": [
+            "/workspace"
+          ],
+          "readRoots": [
+            ".",
+            "/workspace"
+          ],
+          "allowedEffects": [
+            "read",
+            "overwrite"
+          ],
+          "blockedPaths": [
+            ".env*"
+          ],
+          "protectedFileClasses": [
+            "credentials"
+          ],
+          "protectedClassCatalog": "catalog-v1",
+          "protectedEffects": [
+            "overwrite",
+            "delete"
+          ],
+          "maxFilesPerAction": 10,
+          "requireShim": true
+        },
+        "git": {
+          "actions": [
+            "git.status",
+            "git.push"
+          ],
+          "filesystemActions": [
+            "filesystem.write"
+          ],
+          "providers": [
+            "github"
+          ],
+          "allowedRemoteSchemes": [
+            "https",
+            "ssh"
+          ],
+          "allowedOperations": [
+            "status",
+            "push_fast_forward",
+            "force_push"
+          ],
+          "requireApproval": [
+            "force_push"
+          ],
+          "blockedOperations": [
+            "force_push"
+          ],
+          "protectedRefs": [
+            "refs/heads/main",
+            "refs/tags/*"
+          ],
+          "maxRefChangesPerTask": 2,
+          "requireShim": true
+        },
+        "database": {
+          "actions": [
+            "database.query",
+            "database.write"
+          ],
+          "protectedEnvironments": [
+            "production"
+          ],
+          "allowedOperations": [
+            "select",
+            "update"
+          ],
+          "requireApproval": [
+            "update"
+          ],
+          "allowedResources": [
+            "public.*",
+            "audit.log"
+          ],
+          "routineCatalog": "catalog-v1",
+          "requireReadOnlyForSelect": true,
+          "denyUnreviewedIndirectEffects": true,
+          "maxSchemaChangesPerTask": 1,
+          "statementTimeoutMs": 5000,
+          "lockTimeoutMs": 1000,
+          "requireShim": true
+        }
+      }
+    },
+    {
+      "id": "policy-2.1-quoted-root-is-not-unquoted",
+      "markdown": "version: 2.1.0\n\n## repository\nroots: \"/repo\"\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: github\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2.1-unknown-repository-provider",
+      "markdown": "version: 2.1.0\n\n## repository\nroots: .\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: unknown\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2.1-relative-filesystem-root",
+      "markdown": "version: 2.1.0\n\n## filesystem\nactions: filesystem.write\nwrite_roots: relative\nread_roots: .\nallowed_effects: overwrite\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2.1-git-approval-outside-allowed-operations",
+      "markdown": "version: 2.1.0\n\n## git\nactions: git.push\nfilesystem_actions: filesystem.write\nproviders: github\nallowed_remote_schemes: https\nallowed_operations: status\nrequire_approval: force_push\nblocked_operations: force_push\nprotected_refs: refs/heads/main\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "policy-2.1-database-bare-wildcard",
+      "markdown": "version: 2.1.0\n\n## database\nactions: database.query\nprotected_environments: production\nallowed_operations: select\nallowed_resources: *\nroutine_catalog: catalog-v1\nrequire_read_only_for_select: true\ndeny_unreviewed_indirect_effects: true\nrequire_shim: true",
+      "outcome": "reject"
+    },
+    {
+      "id": "token-decimals-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: 6units",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "tokenRules": {
+            "USDC": {
+              "maxTransaction": "100",
+              "decimals": 6
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "token-decimals-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "token-decimals-negative",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: -1",
+      "outcome": "reject"
+    },
+    {
+      "id": "token-decimals-above-maximum",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.USDC.decimals: 37",
+      "outcome": "reject"
+    },
+    {
+      "id": "allow-only-empty-normalized-intent-path",
+      "markdown": "version: 2.0.0\n\n## custom\nallow_only.intent.: safe",
+      "outcome": "reject"
+    },
+    {
+      "id": "deny-if-empty-normalized-intent-path",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_if.intent. equals unsafe",
+      "outcome": "reject"
+    },
+    {
+      "id": "consensus-threshold-numeric-prefix",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: 1.5ETH",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "consensusThresholdEth": 1.5
+        }
+      }
+    },
+    {
+      "id": "consensus-threshold-nonnumeric",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nconsensus_threshold_eth: nope",
+      "outcome": "reject"
+    },
+    {
+      "id": "normalized-leading-zero-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  \"01\": wallet.transfer",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "duplicate-quoted-unquoted-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  \"1\": wallet.transfer\n  1: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-leading-zero-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer, contract.call\nallowed_chains: 1\nchain_actions:\n  \"01\": wallet.transfer\n  1: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-first-duplicate-chain-action-id",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: ,\n  01: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "empty-chain-action-list",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  01: ,",
+      "outcome": "reject"
+    },
+    {
+      "id": "value-less-chain-action-list",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1:",
+      "outcome": "reject"
+    },
+    {
+      "id": "single-space-chain-action-indentation",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n 1: wallet.transfer",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "unindented-unquoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unindented-quoted-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n\"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unquoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n1: wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\"1\": wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-unquoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  1: wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-quoted-numeric-mapping-before-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  \"1\": wallet.transfer\nchain_actions:\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "unquoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-unquoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  1: wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "indented-quoted-numeric-mapping-without-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n  \"1\": wallet.transfer",
+      "outcome": "reject"
+    },
+    {
+      "id": "value-less-dangling-chain-action",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nrequire_shim: true\n  \"8453\":",
+      "outcome": "reject"
+    },
+    {
+      "id": "unquoted-numeric-mapping-after-chain-actions-boundary",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3\n8453: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "quoted-numeric-mapping-after-chain-actions-boundary",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3\n\"8453\": contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "ordinary-evm-boundary-after-chain-actions",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nconsensus_threshold_eth: 3",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": [
+            "wallet.transfer"
+          ],
+          "allowedChains": [
+            1
+          ],
+          "chainActions": {
+            "1": [
+              "wallet.transfer"
+            ]
+          },
+          "consensusThresholdEth": 3
+        }
+      }
+    },
+    {
+      "id": "indented-policy-heading",
+      "markdown": "version: 2.0.0\n\n ## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\n\n## tool_calls\nallowed: bash",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-ordinary-evm-key",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_actions: contract.call\nallowed_chains: 1",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-chain-actions-header",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\nchain_actions:\n  1: wallet.transfer\nchain_actions:\n  8453: contract.call",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-token-scalar",
+      "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200",
+      "outcome": "reject"
+    }
+  ]
+}
