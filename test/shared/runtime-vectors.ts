@@ -95,6 +95,22 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
     );
   });
 
+  it(`serializes sparse policy arrays as null in ${runtime}`, async () => {
+    const singleHole = Array<unknown>(1);
+    const nested = Array<unknown>(3);
+    nested[1] = Array<unknown>(2);
+    const policy = { nested, singleHole };
+    const expected = '{"nested":[null,[null,null],null],"singleHole":[null]}';
+
+    expect(canonicalizePolicyObject([])).toBe("[]");
+    expect(canonicalizePolicyObject(singleHole)).toBe("[null]");
+    expect(canonicalizePolicyObject(singleHole)).not.toBe(canonicalizePolicyObject([]));
+    expect(canonicalizePolicyObject(policy)).toBe(expected);
+    expect(policyCanonicalBytes(policy)).toEqual(new TextEncoder().encode(expected));
+    await expect(hashPolicy(adapter, policy)).resolves.toBe("326167890b93712a7dd21556591c1fed6389d6abb7da66f17947100274ead50e");
+    await expect(hashPolicy(adapter, singleHole)).resolves.toBe("1d8fc6ceb1f94c6326d6d5483d258fcb2e179e9869325b245d105c2219bf69fd");
+  });
+
   it(`ignores signature-like headings inside closed HTML comments in ${runtime}`, () => {
     const unsigned = "version: 2.0.0\n\n<!--\n## signature\nsigil-sig: fake\n-->\n\n## tool_calls\nallowed: bash";
     expect(splitSignatureBlock(unsigned)).toEqual({ unsigned });

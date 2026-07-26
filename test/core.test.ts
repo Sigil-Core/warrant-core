@@ -86,6 +86,23 @@ describe("warranty.md parser", () => {
     );
   });
 
+  it("serializes sparse policy arrays as null with stable bytes and hashes", async () => {
+    const singleHole = Array<unknown>(1);
+    const nested = Array<unknown>(3);
+    nested[1] = Array<unknown>(2);
+    const policy = { nested, singleHole };
+    const expected = '{"nested":[null,[null,null],null],"singleHole":[null]}';
+    const expectedHash = "326167890b93712a7dd21556591c1fed6389d6abb7da66f17947100274ead50e";
+
+    expect(canonicalizePolicyObject([])).toBe("[]");
+    expect(canonicalizePolicyObject(singleHole)).toBe("[null]");
+    expect(canonicalizePolicyObject(singleHole)).not.toBe(canonicalizePolicyObject([]));
+    expect(canonicalizePolicyObject(policy)).toBe(expected);
+    expect(policyCanonicalBytes(policy)).toEqual(new TextEncoder().encode(expected));
+    await expect(hashPolicy(createNodeCryptoAdapter(), policy)).resolves.toBe(expectedHash);
+    await expect(hashPolicy(createNodeCryptoAdapter(), singleHole)).resolves.toBe("1d8fc6ceb1f94c6326d6d5483d258fcb2e179e9869325b245d105c2219bf69fd");
+  });
+
   it("parses all canonical fixture policies and preserves their policy hashes", async () => {
     const adapter = createNodeCryptoAdapter();
     for (const fixture of fixtures) {
@@ -103,6 +120,39 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("## tool_calls\nhttp.allowed_methods: GET")).toThrow("requires version 2.0.0");
     expect(() => parsePolicyMarkdown("version: 2.1.0\n\n## unexpected\nkey: value")).toThrow("Unknown policy block");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## filesystem\nactions: read\nwrite_roots: .\nread_roots: .\nallowed_effects: read\nrequire_shim: true")).toThrow("2.1 resource profiles");
+  });
+
+  it("accepts valid CRLF Policy 2.0 and signed Policy 2.1 documents", () => {
+    const policy20 = "version: 2.0.0\r\n\r\n## tool_calls\r\nallowed: bash";
+    expect(parsePolicyMarkdown(policy20)).toEqual({
+      version: "2.0.0",
+      tool_calls: { allowed: ["bash"] },
+    });
+
+    const policy21 = [
+      "version: 2.1.0",
+      "",
+      "## repository",
+      "roots: .",
+      "block_outside_writes: true",
+      "protect_git_history: true",
+      "protect_sensitive_files: true",
+      "git_providers: github",
+      "require_shim: true",
+    ].join("\r\n");
+    const signedPolicy21 = `${policy21}\r\n\r\n## signature\r\nsigil-sig: abc_DEF-123\r\n`;
+    expect(splitSignatureBlock(signedPolicy21)).toEqual({ unsigned: policy21, signature: "abc_DEF-123" });
+    expect(parsePolicyMarkdown(signedPolicy21)).toEqual({
+      version: "2.1.0",
+      repository: {
+        roots: ["."],
+        blockOutsideWrites: true,
+        protectGitHistory: true,
+        protectSensitiveFiles: true,
+        gitProviders: ["github"],
+        requireShim: true,
+      },
+    });
   });
 
   it("fails closed instead of downgrading malformed root version declarations", () => {
@@ -126,6 +176,14 @@ describe("warranty.md parser", () => {
     }
     expect(() => parsePolicyMarkdown(`version: 2.0.0\nversion: 2.0.0${permissiveLegacyBody}`)).toThrow("Duplicate version");
     expect(() => parsePolicyMarkdown(`version: 2.0${permissiveLegacyBody}`)).toThrow("Invalid policy version");
+    for (const malformed of [
+      `versoin: 2.0.0\r\n${permissiveLegacyBody.trimStart()}`,
+      `version=2.0.0\r\n${permissiveLegacyBody.trimStart()}`,
+      `version: 2.0\r\n${permissiveLegacyBody.trimStart()}`,
+      `version: 2.0.0\r\nversion=2.0.0\n${permissiveLegacyBody.trimStart()}`,
+    ]) {
+      expect(() => parsePolicyMarkdown(malformed)).toThrow();
+    }
     expect(parsePolicyMarkdown(`# Warranty Policy\nNote: copy this policy before use.\n> This policy description is documentation.\n<!--\n## notes\npolicy metadata\n-->\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
     expect(parsePolicyMarkdown(`Versioning: draft\nSession: current\nVersions vary between deployments.\nVersions 2 and 3 are supported.\nVersioningDocumentationKeyThatMustNotReachTypoDistance: notes\nversion: 2.0.0\n\n## tool_calls\nallowed: bash`).version).toBe("2.0.0");
     expect(parsePolicyMarkdown(permissiveLegacyBody).tool_calls?.emailRequireApproval).toBe(false);

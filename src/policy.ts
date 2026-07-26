@@ -137,7 +137,7 @@ function parseVersion(markdown: string): string {
   for (const line of root.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
-    const match = line.match(/^\s*version:\s*(.+)$/i);
+    const match = line.match(/^\s*version:\s*(.+?)\r?$/i);
     if (match) {
       values.push(match[1]!.trim());
       continue;

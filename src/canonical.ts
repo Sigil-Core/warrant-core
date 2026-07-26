@@ -24,7 +24,12 @@ function serializePolicy(value: unknown): string {
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
-  if (Array.isArray(value)) return `[${value.map(serializePolicy).join(",")}]`;
+  if (Array.isArray(value)) {
+    const entries = Array.from({ length: value.length }, (_, index) =>
+      Object.hasOwn(value, index) ? serializePolicy(value[index]) : "null"
+    );
+    return `[${entries.join(",")}]`;
+  }
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([, entry]) => entry !== undefined)

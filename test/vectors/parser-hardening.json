@@ -73,6 +73,39 @@
           "requireShim": false
         }
       }
+    },
+    {
+      "id": "policy-2-crlf",
+      "markdown": "version: 2.0.0\r\n\r\n## tool_calls\r\nallowed: bash",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.0.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      }
+    },
+    {
+      "id": "signed-policy-2-1-crlf",
+      "markdown": "version: 2.1.0\r\n\r\n## repository\r\nroots: .\r\nblock_outside_writes: true\r\nprotect_git_history: true\r\nprotect_sensitive_files: true\r\ngit_providers: github\r\nrequire_shim: true\r\n\r\n## signature\r\nsigil-sig: abc_DEF-123\r\n",
+      "outcome": "accept",
+      "canonicalPolicy": {
+        "version": "2.1.0",
+        "repository": {
+          "roots": [
+            "."
+          ],
+          "blockOutsideWrites": true,
+          "protectGitHistory": true,
+          "protectSensitiveFiles": true,
+          "gitProviders": [
+            "github"
+          ],
+          "requireShim": true
+        }
+      }
     }
   ]
 }

@@ -55,6 +55,7 @@ Use `canonicalizePolicyObject` and `hashPolicy` for an existing Sigil Warrant `p
   number handling, and locale-default case order. Distinct keys that collate equally use ECMAScript
   UTF-16 code-unit order as a deterministic tie-break, so insertion order cannot change policy bytes.
 - Array order stays unchanged.
+- Sparse array holes and explicit `undefined` array entries serialize as `null`, preserving array length and valid JSON.
 - Object properties with `undefined` values are omitted.
 - `null`, strings, booleans, and finite numbers serialize as JSON.
 - Unsupported values serialize as `null` rather than becoming a `pg-commit-v1` validation error.
