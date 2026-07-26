@@ -1,6 +1,6 @@
 {
   "name": "@sigilcore/warrant-core",
-  "version": "0.1.0-rc.0",
+  "version": "0.1.0",
   "description": "Platform-neutral parsing, canonicalization, and cryptographic primitives for Sigil Warrant policies.",
   "license": "MIT",
   "repository": {
