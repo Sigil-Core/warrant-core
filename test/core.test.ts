@@ -386,7 +386,7 @@ describe("warranty.md parser", () => {
     expect(() => parsePolicyMarkdown("version: 1.0.0\n\n## tool_calls\nrequire_approval: bash")).toThrow("requires version 2.0.0");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## evm\nrequire_shim: yes")).toThrow("must be true or false");
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## custom\nrequire_approval: bad*pattern* ")).toThrow("trailing * wildcard");
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\nrequire_shim: true\nrequire_shim: false")).toThrow("Duplicate policy key");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\nrequire_shim: true\nrequire_shim: false")).toThrow("Duplicate soft_limits policy key");
   });
 
   it("rejects empty custom policies and invalid HTTP DNS labels", () => {
@@ -516,6 +516,25 @@ describe("warranty.md parser", () => {
     }
     expect(inheritedCaps.missing).toBeUndefined();
     expect(Object.prototype).not.toHaveProperty("maxCount");
+  });
+
+  it("rejects duplicate soft limits without overwrite-order dependence", () => {
+    for (const values of [["1", "100"], ["100", "1"]]) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: ${values[0]}\ndaily_tool_calls: ${values[1]}`)).toThrow("Duplicate soft_limits policy key: daily_tool_calls");
+    }
+    for (const values of [["0.1", "1000"], ["1000", "0.1"]]) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: ${values[0]}\ndaily_evm_limit_eth: ${values[1]}`)).toThrow("Duplicate soft_limits policy key: daily_evm_limit_eth");
+    }
+    for (const values of [["1", "100"], ["100", "1"]]) {
+      expect(() => parsePolicyMarkdown(`version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: ${values[0]}\ncap.requests.max_count: ${values[1]}\ncap.requests.window: day\ncap.requests.action: email.send`)).toThrow("Duplicate soft_limits cap key: requests.max_count");
+    }
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: 1\ncap.requests.window: day\ncap.requests.action: email.send\ncap.requests.group_by: metadata.first\ncap.requests.group_by: metadata.second")).toThrow("Duplicate soft_limits cap key: requests.group_by");
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 1\nrequire_approval: bash\nrequire_approval: email.send")).toThrow("Duplicate soft_limits policy key: require_approval");
+
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: 10\ncap.requests.window: day\ncap.requests.action: email.send\ncap.requests.group_by: metadata.campaign\ncap.background.max_count: 5\ncap.background.window: task\ncap.background.action: worker.*").soft_limits?.caps).toEqual({
+      requests: { maxCount: 10, window: "day", action: "email.send", groupBy: "metadata.campaign" },
+      background: { maxCount: 5, window: "task", action: "worker.*" },
+    });
   });
 
   it("matches Sigil Sign EVM defaults and required allowlists", () => {

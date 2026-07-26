@@ -208,6 +208,36 @@
       "id": "standalone-comment-closer-before-unclosed-opener",
       "markdown": "version: 2.0.0\n\n## custom\ndeny_string: -->\n<!-- unclosed",
       "outcome": "reject"
+    },
+    {
+      "id": "duplicate-daily-tool-calls-weaker-then-stronger",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 1\ndaily_tool_calls: 100",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-daily-tool-calls-stronger-then-weaker",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 100\ndaily_tool_calls: 1",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-daily-evm-limit",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_evm_limit_eth: 0.1\ndaily_evm_limit_eth: 1000",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-cap-max-count",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: 1\ncap.requests.max_count: 100\ncap.requests.window: day\ncap.requests.action: email.send",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-normalized-cap-group-by",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ncap.requests.max_count: 1\ncap.requests.window: day\ncap.requests.action: email.send\ncap.requests.group_by: metadata.first\ncap.requests.group_by: metadata.second",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-soft-limit-generic-control",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 1\nrequire_approval: bash\nrequire_approval: email.send",
+      "outcome": "reject"
     }
   ]
 }

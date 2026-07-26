@@ -30,7 +30,7 @@ import {
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. A `matches` declaration carries one comma-free regex value; comma-bearing patterns reject to preserve the frozen Sigil Sign parser boundary. Repeat the declaration to allow multiple patterns. |
+| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. A `matches` declaration carries one comma-free regex value; comma-bearing patterns reject to preserve the frozen Sigil Sign parser boundary. Repeat the declaration to allow multiple patterns. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |

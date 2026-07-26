@@ -25,6 +25,14 @@ const RESOURCE_ENUMS: Record<string, Set<string>> = {
   "database.allowedOperations": DATABASE_OPERATIONS,
   "database.requireApproval": DATABASE_OPERATIONS,
 };
+const SOFT_LIMIT_CAP_FIELDS = {
+  max_count: "maxCount",
+  max_sum_usd: "maxSumUsd",
+  window: "window",
+  action: "action",
+  group_by: "groupBy",
+  amount_field: "amountField",
+} as const;
 
 const RESOURCE_CONFIG: Record<string, { required: string[]; keys: Record<string, string> }> = {
   repository: {
@@ -484,14 +492,17 @@ function actionList(value: string, key: string): string[] { const values = list(
 function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length) throw new Error(`${key} must contain at least one entry`); if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 
 function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown> {
-  const result: Record<string, unknown> = {}; const caps = Object.create(null) as Record<string, Record<string, unknown>>; const genericControls = new Set<string>();
+  const result: Record<string, unknown> = {}; const caps = Object.create(null) as Record<string, Record<string, unknown>>;
+  const scalarKeys = new Set<string>(); const capKeys = new Set<string>();
   let hasLimit = false;
   for (const line of lines) {
     const cap = line.match(/^cap\.([A-Za-z0-9_-]+)\.(max_count|max_sum_usd|window|action|group_by|amount_field):\s*(.*?)\s*$/);
-    if (cap) { if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0"); if (RESERVED_PROFILE_NAMES.has(cap[1]!)) throw new Error(`Reserved soft_limits cap name: ${cap[1]}`); const profile = caps[cap[1]!] ??= {}; const field = cap[2]!; if (field in profile) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`); const rawValue = cap[3]!.trim(); const value = unquote(rawValue); if (field === "max_count") { if (!positiveInt(rawValue)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(rawValue); } else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; } else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; } else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; } else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`); else profile.amountField = required(value, `cap.${cap[1]}.amount_field`); continue; }
+    if (cap) { if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0"); if (RESERVED_PROFILE_NAMES.has(cap[1]!)) throw new Error(`Reserved soft_limits cap name: ${cap[1]}`); const field = cap[2]! as keyof typeof SOFT_LIMIT_CAP_FIELDS; const canonicalKey = `${cap[1]}.${SOFT_LIMIT_CAP_FIELDS[field]}`; if (capKeys.has(canonicalKey)) throw new Error(`Duplicate soft_limits cap key: ${cap[1]}.${field}`); capKeys.add(canonicalKey); const profile = caps[cap[1]!] ??= {}; const rawValue = cap[3]!.trim(); const value = unquote(rawValue); if (field === "max_count") { if (!positiveInt(rawValue)) throw new Error(`cap.${cap[1]}.max_count must be a positive integer`); profile.maxCount = Number(rawValue); } else if (field === "max_sum_usd") { if (!positiveDecimal(value)) throw new Error(`cap.${cap[1]}.max_sum_usd must be a positive USD decimal with at most 6 places`); profile.maxSumUsd = value; } else if (field === "window") { if (!["day", "hour", "task"].includes(value)) throw new Error(`cap.${cap[1]}.window must be day, hour, or task`); profile.window = value; } else if (field === "action") { if (!ACTION_PATTERN(value)) throw new Error(`cap.${cap[1]}.action supports only an exact value or one trailing * wildcard`); profile.action = value; } else if (field === "group_by") profile.groupBy = required(value, `cap.${cap[1]}.group_by`); else profile.amountField = required(value, `cap.${cap[1]}.amount_field`); continue; }
     if (line.startsWith("cap.")) throw new Error(`Unrecognized soft_limits policy key: ${line.split(":", 1)[0]}`);
     const [key, value] = requireKeyValue(line, "soft_limits");
-    if (parseGenericControl(result, key, value, isV2, genericControls)) continue;
+    if (scalarKeys.has(key)) throw new Error(`Duplicate soft_limits policy key: ${key}`);
+    scalarKeys.add(key);
+    if (parseGenericControl(result, key, value, isV2)) continue;
     if (key === "daily_tool_calls") {
       const parsed = integer(value);
       if (parsed === undefined || parsed <= 0 || (isV2 && !positiveInt(value))) throw new Error("daily_tool_calls must be a positive integer");
