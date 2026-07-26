@@ -299,6 +299,14 @@ const parseGenericControl = (result: Record<string, unknown>, key: string, value
   applyGenericControl(result, key, value);
   return true;
 };
+const parseGenericControlLine = (result: Record<string, unknown>, line: string, isV2: boolean, seen?: Set<string>): boolean => {
+  const generic = line.match(/^(require_approval|require_shim):\s*(.+)$/);
+  if (!generic) return false;
+  const key = generic[1];
+  const value = generic[2];
+  if (key === undefined || value === undefined) return false;
+  return parseGenericControl(result, key, value, isV2, seen);
+};
 
 interface EvmParserState {
   chains: boolean;
@@ -317,16 +325,27 @@ const TOKEN_PROFILE_PARSERS: Record<string, (profile: Record<string, unknown>, s
   max_transaction: (profile, _symbol, value) => { profile.maxTransaction = value.trim(); },
   consensus_threshold: (profile, _symbol, value) => { profile.consensusThreshold = value.trim(); },
 };
-const parseEvmToken = (tokens: Record<string, Record<string, unknown>>, tokenFields: Set<string>, line: string): boolean => {
+const evmTokenParts = (line: string): { rawSymbol: string; field: string; rawValue: string } | undefined => {
   const token = line.match(/^token\.([A-Za-z0-9_]+)\.(max_transaction|consensus_threshold|decimals|addresses):\s*(.+)$/);
-  if (!token) return false;
-  const [, rawSymbol, field, rawTokenValue] = token;
-  if (!rawSymbol || !field || rawTokenValue === undefined) return true;
+  if (!token) return undefined;
+  const rawSymbol = token[1];
+  const field = token[2];
+  const rawValue = token[3];
+  if (!rawSymbol || !field || rawValue === undefined) return { rawSymbol: "", field: "", rawValue: "" };
+  return { rawSymbol, field, rawValue };
+};
+const applyEvmToken = (tokens: Record<string, Record<string, unknown>>, tokenFields: Set<string>, rawSymbol: string, field: string, rawValue: string): void => {
   const symbol = rawSymbol.toUpperCase();
   const tokenField = `${symbol}.${field}`;
   if (field !== "addresses" && tokenFields.has(tokenField)) throw new Error(`Duplicate EVM token policy key: token.${tokenField}`);
   tokenFields.add(tokenField);
-  TOKEN_PROFILE_PARSERS[field]?.(tokens[symbol] ??= {}, symbol, rawTokenValue);
+  TOKEN_PROFILE_PARSERS[field]?.(tokens[symbol] ??= {}, symbol, rawValue);
+};
+const parseEvmToken = (tokens: Record<string, Record<string, unknown>>, tokenFields: Set<string>, line: string): boolean => {
+  const parts = evmTokenParts(line);
+  if (!parts) return false;
+  if (!parts.rawSymbol || !parts.field) return true;
+  applyEvmToken(tokens, tokenFields, parts.rawSymbol, parts.field, parts.rawValue);
   return true;
 };
 const parseMaxTransactionEth = (result: Record<string, unknown>, value: string): void => {
@@ -365,6 +384,29 @@ const ensureEvmRequirements = (result: Record<string, unknown>): void => {
   if (!Array.isArray(result.allowedActions) || result.allowedActions.length === 0) throw new Error("## evm requires at least one allowed_action");
   if (!Array.isArray(result.allowedChains) || result.allowedChains.length === 0) throw new Error("## evm requires at least one positive allowed_chain");
 };
+interface EvmParseContext {
+  result: Record<string, unknown>;
+  tokens: Record<string, Record<string, unknown>>;
+  genericControls: Set<string>;
+  ordinaryKeys: Set<string>;
+  tokenFields: Set<string>;
+  state: EvmParserState;
+}
+const parseEvmOrdinaryLine = (context: EvmParseContext, line: string, isV2: boolean): void => {
+  const [key, value] = requireKeyValue(line, "EVM");
+  if (parseGenericControl(context.result, key, value, isV2, context.genericControls)) return;
+  if (context.ordinaryKeys.has(key)) throw new Error(`Duplicate EVM policy key: ${key}`);
+  context.ordinaryKeys.add(key);
+  parseEvmValue(context.result, key, value, isV2);
+};
+const parseEvmLine = (context: EvmParseContext, line: string, isV2: boolean): void => {
+  if (parseEvmChainHeader(context.state, line)) return;
+  if (parseGenericControlLine(context.result, line, isV2, context.genericControls)) return;
+  if (isEvmChainActionMapping(context.state, line)) return;
+  context.state.chains = false;
+  if (parseEvmToken(context.tokens, context.tokenFields, line)) return;
+  parseEvmOrdinaryLine(context, line, isV2);
+};
 const parseEvm = (lines: string[], isV2: boolean, body: string): Record<string, unknown> => {
   const result: Record<string, unknown> = { maxTransactionEth: 5 };
   const tokens: Record<string, Record<string, unknown>> = {};
@@ -373,19 +415,8 @@ const parseEvm = (lines: string[], isV2: boolean, body: string): Record<string, 
   const tokenFields = new Set<string>();
   const state: EvmParserState = { chains: false, chainActionsSeen: false };
   const chainActions = parseEvmChainActions(body);
-  for (const line of lines) {
-    if (parseEvmChainHeader(state, line)) continue;
-    const generic = line.match(/^(require_approval|require_shim):\s*(.+)$/);
-    if (generic) { parseGenericControl(result, generic[1]!, generic[2]!, isV2, genericControls); continue; }
-    if (isEvmChainActionMapping(state, line)) continue;
-    state.chains = false;
-    if (parseEvmToken(tokens, tokenFields, line)) continue;
-    const [key, value] = requireKeyValue(line, "EVM");
-    if (parseGenericControl(result, key, value, isV2, genericControls)) continue;
-    if (ordinaryKeys.has(key)) throw new Error(`Duplicate EVM policy key: ${key}`);
-    ordinaryKeys.add(key);
-    parseEvmValue(result, key, value, isV2);
-  }
+  const context: EvmParseContext = { result, tokens, genericControls, ordinaryKeys, tokenFields, state };
+  for (const line of lines) parseEvmLine(context, line, isV2);
   if (chainActions !== undefined) result.chainActions = chainActions;
   if (Object.keys(tokens).length) result.tokenRules = tokens;
   ensureEvmRequirements(result);
@@ -466,12 +497,27 @@ const mergeCustomAllowRule = (state: CustomParserState, scope: string, operator:
   if (Boolean(existing.attested) !== attested) throw new Error(`allow_only.${fieldPath} mixes attested and non-attested rules; use one provenance mode per field and action scope`);
   existing.values = [...new Set([...(existing.values as string[]), ...values])];
 };
-const parseCustomAllow = (state: CustomParserState, line: string, isV2: boolean): boolean => {
-  const allow = customAllowMatch(line);
-  if (!allow) return false;
-  const [, rawScope, rawPath, rawAttested, rawOperator, rawValues] = allow;
-  if (!rawPath || rawValues === undefined) return true;
-  if (!isV2 && (rawScope || rawAttested || rawOperator)) throw new Error("Policy syntax requires version 2.0.0");
+interface CustomAllowParts {
+  rawScope: string | undefined;
+  rawPath: string;
+  rawAttested: string | undefined;
+  rawOperator: string | undefined;
+  rawValues: string;
+}
+const customAllowParts = (allow: RegExpMatchArray): CustomAllowParts | undefined => {
+  const rawPath = allow[2];
+  const rawValues = allow[5];
+  if (rawPath === undefined || rawValues === undefined) return undefined;
+  return { rawScope: allow[1], rawPath, rawAttested: allow[3], rawOperator: allow[4], rawValues };
+};
+const customAllowRequiresV2 = (parts: CustomAllowParts): boolean =>
+  Boolean(parts.rawScope || parts.rawAttested || parts.rawOperator);
+const validateCustomAllowVersion = (parts: CustomAllowParts, isV2: boolean): void => {
+  if (!isV2 && customAllowRequiresV2(parts)) throw new Error("Policy syntax requires version 2.0.0");
+};
+const applyCustomAllow = (state: CustomParserState, parts: CustomAllowParts, isV2: boolean): void => {
+  const { rawScope, rawPath, rawAttested, rawOperator, rawValues } = parts;
+  validateCustomAllowVersion(parts, isV2);
   const actionScope = rawScope?.trim();
   if (actionScope === "") throw new Error("allow_only action scope must not be empty");
   const fieldPath = stripIntent(rawPath);
@@ -481,17 +527,35 @@ const parseCustomAllow = (state: CustomParserState, line: string, isV2: boolean)
   const attested = rawAttested === "attested";
   const scope = `${actionScope ?? "<global>"}::${fieldPath}`;
   mergeCustomAllowRule(state, scope, operator, attested, fieldPath, customAllowRule(actionScope, fieldPath, operator, attested, values), values);
+};
+const parseCustomAllow = (state: CustomParserState, line: string, isV2: boolean): boolean => {
+  const allow = customAllowMatch(line);
+  if (!allow) return false;
+  const parts = customAllowParts(allow);
+  if (!parts) return true;
+  applyCustomAllow(state, parts, isV2);
   return true;
+};
+const customDenyParts = (deny: RegExpMatchArray): { rawPath: string; operator: string; rawValue: string } | undefined => {
+  const rawPath = deny[1];
+  const operator = deny[2];
+  const rawValue = deny[3];
+  if ([rawPath, operator, rawValue].some((value) => value === undefined)) return undefined;
+  return { rawPath, operator, rawValue };
+};
+const customDenyRule = (deny: RegExpMatchArray): Record<string, unknown> | undefined => {
+  const parts = customDenyParts(deny);
+  if (!parts) return undefined;
+  const fieldPath = stripIntent(parts.rawPath);
+  if (!fieldPath) throw new Error("deny_if field path must not be empty");
+  const value = unquote(parts.rawValue);
+  return { name: `deny_if.${fieldPath}.${parts.operator}:${value}`, type: "field", fieldPath, operator: parts.operator, value };
 };
 const parseCustomDeny = (rules: Array<Record<string, unknown>>, line: string): boolean => {
   const deny = line.match(/^deny_if\.(\S+)\s+(contains|starts_with|ends_with|matches|equals|not_equals)\s+(.+)$/);
   if (!deny) return false;
-  const [, rawPath, operator, rawValue] = deny;
-  if (!rawPath || !operator || rawValue === undefined) return true;
-  const fieldPath = stripIntent(rawPath);
-  if (!fieldPath) throw new Error("deny_if field path must not be empty");
-  const value = unquote(rawValue);
-  rules.push({ name: `deny_if.${fieldPath}.${operator}:${value}`, type: "field", fieldPath, operator, value });
+  const rule = customDenyRule(deny);
+  if (rule) rules.push(rule);
   return true;
 };
 const parseCustomDenyString = (rules: Array<Record<string, unknown>>, line: string): boolean => {
@@ -502,21 +566,21 @@ const parseCustomDenyString = (rules: Array<Record<string, unknown>>, line: stri
   return true;
 };
 const parseCustomLine = (state: CustomParserState, line: string, isV2: boolean): boolean => {
-  const generic = line.match(/^(require_approval|require_shim):\s*(.+)$/);
-  if (generic) return parseGenericControl(state.controls, generic[1]!, generic[2]!, isV2, state.genericControls);
+  if (parseGenericControlLine(state.controls, line, isV2, state.genericControls)) return true;
   return parseCustomAllow(state, line, isV2) || parseCustomDeny(state.rules, line) || parseCustomDenyString(state.rules, line);
+};
+const finalizeCustom = (state: CustomParserState): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined => {
+  const { rules, controls } = state;
+  if (!rules.length && controls.requireApproval === undefined && controls.requireShim !== true) {
+    if (controls.requireShim === false) throw new Error("## custom must declare at least one enforceable rule or control");
+    return undefined;
+  }
+  return { rules, ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}), ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}) };
 };
 const parseCustom = (lines: string[], isV2: boolean): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined => {
   const state: CustomParserState = { rules: [], controls: {}, genericControls: new Set<string>(), allows: new Map<string, Record<string, unknown>>(), operators: new Map<string, string>() };
   for (const line of lines) if (!parseCustomLine(state, line, isV2)) throw new Error(`Unrecognized custom rule: ${line}`);
-  const { rules, controls } = state;
-  if (!rules.length && controls.requireApproval === undefined && controls.requireShim !== true) {
-    if (controls.requireShim === false) {
-      throw new Error("## custom must declare at least one enforceable rule or control");
-    }
-    return undefined;
-  }
-  return { rules, ...(controls.requireApproval ? { requireApproval: controls.requireApproval as string[] } : {}), ...(controls.requireShim !== undefined ? { requireShim: controls.requireShim as boolean } : {}) };
+  return finalizeCustom(state);
 };
 
 function validPolicyHost(value: string): boolean {
@@ -529,25 +593,35 @@ function validPolicyHost(value: string): boolean {
   );
 }
 
+const MCP_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, key: string, value: string) => void> = {
+  allowed_servers: (result, key, value) => { result.allowedServers = actionList(value, key); },
+  allowed_tools: (result, key, value) => { result.allowedTools = actionList(value, key); },
+  blocked_tools: (result, key, value) => { result.blockedTools = actionList(value, key); },
+  require_approval: (result, key, value) => { result.requireApproval = actionList(value, key); },
+  require_shim: (result, key, value) => { result.requireShim = boolean(value, key, true); },
+};
+const parseMcpValue = (result: Record<string, unknown>, key: string, value: string): void => {
+  const parser = MCP_VALUE_PARSERS[key];
+  if (!parser) throw new Error(`Unrecognized MCP policy key: ${key}`);
+  parser(result, key, value);
+};
+const validateMcpToolOverlap = (result: Record<string, unknown>): void => {
+  const allowed = result.allowedTools as string[] | undefined; const blocked = result.blockedTools as string[] | undefined;
+  if (!allowed || !blocked) return;
+  const matchesPattern = (value: string, pattern: string) =>
+    value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
+  const overlap = allowed.filter((entry) => blocked.some((pattern) => matchesPattern(entry, pattern)));
+  if (overlap.length) throw new Error(`MCP policy lists the same tool in both allowed_tools and blocked_tools: ${overlap.join(", ")}`);
+};
+const requireMcpPolicy = (result: Record<string, unknown>): void => {
+  if (!result.allowedServers && !result.allowedTools && !result.blockedTools) throw new Error("## mcp must declare at least one of allowed_servers, allowed_tools, or blocked_tools");
+};
 const parseMcp = (lines: string[], isV2: boolean): Record<string, unknown> => {
   if (!isV2) throw new Error("Policy block ## mcp requires version 2.0.0");
   const result: Record<string, unknown> = {};
-  for (const [key, value] of unique(lines, "MCP")) {
-    if (key === "allowed_servers") result.allowedServers = actionList(value, key);
-    else if (key === "allowed_tools") result.allowedTools = actionList(value, key);
-    else if (key === "blocked_tools") result.blockedTools = actionList(value, key);
-    else if (key === "require_approval") result.requireApproval = actionList(value, key);
-    else if (key === "require_shim") result.requireShim = boolean(value, key, true);
-    else throw new Error(`Unrecognized MCP policy key: ${key}`);
-  }
-  if (!(result.allowedServers || result.allowedTools || result.blockedTools)) throw new Error("## mcp must declare at least one of allowed_servers, allowed_tools, or blocked_tools");
-  const allowed = result.allowedTools as string[] | undefined; const blocked = result.blockedTools as string[] | undefined;
-  if (allowed && blocked) {
-    const matchesPattern = (value: string, pattern: string) =>
-      value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
-    const overlap = allowed.filter((entry) => blocked.some((pattern) => matchesPattern(entry, pattern)));
-    if (overlap.length) throw new Error(`MCP policy lists the same tool in both allowed_tools and blocked_tools: ${overlap.join(", ")}`);
-  }
+  for (const [key, value] of unique(lines, "MCP")) parseMcpValue(result, key, value);
+  requireMcpPolicy(result);
+  validateMcpToolOverlap(result);
   return result;
 };
 
@@ -613,17 +687,31 @@ const SOFT_CAP_VALUE_PARSERS: Record<string, (profile: Record<string, unknown>, 
   group_by: (profile, capName, _raw, value) => { profile.groupBy = required(value, `cap.${capName}.group_by`); },
   amount_field: (profile, capName, _raw, value) => { profile.amountField = required(value, `cap.${capName}.amount_field`); },
 };
-const parseSoftCap = (state: SoftLimitState, line: string, isV2: boolean): boolean => {
+const softCapParts = (line: string): { capName: string; rawField: string; rawValue: string } | undefined => {
   const cap = softCapMatch(line);
-  if (!cap) return false;
-  const [, capName, rawField, rawValue] = cap;
-  if (!capName || !rawField || rawValue === undefined) return true;
+  if (!cap) return undefined;
+  const capName = cap[1];
+  const rawField = cap[2];
+  const rawValue = cap[3];
+  if (!capName || !rawField || rawValue === undefined) return { capName: "", rawField: "", rawValue: "" };
+  return { capName, rawField, rawValue };
+};
+const validateSoftCapField = (state: SoftLimitState, capName: string, rawField: string, isV2: boolean): keyof typeof SOFT_LIMIT_CAP_FIELDS => {
   if (!isV2) throw new Error("Named soft_limits caps require version 2.0.0");
   if (["window_days", "window_hours", "timezone"].includes(rawField)) throw new Error(`cap.${capName}.${rawField} is not yet supported`);
   const field = rawField as keyof typeof SOFT_LIMIT_CAP_FIELDS;
   validateSoftCapIdentity(state, capName, field);
+  return field;
+};
+const applySoftCap = (state: SoftLimitState, capName: string, field: keyof typeof SOFT_LIMIT_CAP_FIELDS, rawValue: string): void => {
   const raw = rawValue.trim();
   SOFT_CAP_VALUE_PARSERS[field]?.(state.caps[capName] ??= {}, capName, raw, unquote(raw));
+};
+const parseSoftCap = (state: SoftLimitState, line: string, isV2: boolean): boolean => {
+  const parts = softCapParts(line);
+  if (!parts) return false;
+  if (!parts.capName || !parts.rawField) return true;
+  applySoftCap(state, parts.capName, validateSoftCapField(state, parts.capName, parts.rawField, isV2), parts.rawValue);
   return true;
 };
 const parseDailyToolCalls = (state: SoftLimitState, value: string, isV2: boolean): void => {
@@ -652,50 +740,57 @@ const parseSoftLimitScalar = (state: SoftLimitState, line: string, isV2: boolean
   if (!parser) throw new Error(`Unrecognized soft_limits policy key: ${key}`);
   parser(state, value, isV2);
 };
-const validateSoftCaps = (caps: Record<string, Record<string, unknown>>): void => {
-  for (const [name, cap] of Object.entries(caps)) {
-    if ((cap.maxCount === undefined) === (cap.maxSumUsd === undefined)) throw new Error(`cap.${name} requires exactly one of max_count or max_sum_usd`);
-    if (!cap.window || !cap.action) throw new Error(`cap.${name}.window and cap.${name}.action are required`);
-    if (cap.maxSumUsd !== undefined && !cap.amountField) throw new Error(`cap.${name}.amount_field is required for sum caps`);
-    if (cap.maxCount !== undefined && cap.amountField) throw new Error(`cap.${name}.amount_field is not valid for count caps`);
-  }
+const validateSoftCapLimit = (name: string, cap: Record<string, unknown>): void => {
+  if ((cap.maxCount === undefined) === (cap.maxSumUsd === undefined)) throw new Error(`cap.${name} requires exactly one of max_count or max_sum_usd`);
 };
-const parseSoftLimits = (lines: string[], isV2: boolean): Record<string, unknown> => {
-  const state: SoftLimitState = { result: {}, caps: Object.create(null) as Record<string, Record<string, unknown>>, scalarKeys: new Set<string>(), capKeys: new Set<string>(), hasLimit: false };
-  for (const line of lines) {
-    if (parseSoftCap(state, line, isV2)) continue;
-    parseSoftLimitScalar(state, line, isV2);
-  }
+const validateSoftCapRequirements = (name: string, cap: Record<string, unknown>): void => {
+  if (!cap.window || !cap.action) throw new Error(`cap.${name}.window and cap.${name}.action are required`);
+};
+const validateSoftCapAmountField = (name: string, cap: Record<string, unknown>): void => {
+  if (cap.maxSumUsd !== undefined && !cap.amountField) throw new Error(`cap.${name}.amount_field is required for sum caps`);
+  if (cap.maxCount !== undefined && cap.amountField) throw new Error(`cap.${name}.amount_field is not valid for count caps`);
+};
+const validateSoftCap = (name: string, cap: Record<string, unknown>): void => {
+  validateSoftCapLimit(name, cap);
+  validateSoftCapRequirements(name, cap);
+  validateSoftCapAmountField(name, cap);
+};
+const validateSoftCaps = (caps: Record<string, Record<string, unknown>>): void => {
+  for (const [name, cap] of Object.entries(caps)) validateSoftCap(name, cap);
+};
+const finalizeSoftLimits = (state: SoftLimitState, isV2: boolean): Record<string, unknown> => {
   validateSoftCaps(state.caps);
   if (Object.keys(state.caps).length) { state.result.caps = state.caps; state.hasLimit = true; }
   if (isV2 && !state.hasLimit) throw new Error("## soft_limits must declare at least one enforced limit under version 2.0.0");
   return state.result;
 };
+const parseSoftLimits = (lines: string[], isV2: boolean): Record<string, unknown> => {
+  const state: SoftLimitState = { result: {}, caps: Object.create(null) as Record<string, Record<string, unknown>>, scalarKeys: new Set<string>(), capKeys: new Set<string>(), hasLimit: false };
+  for (const line of lines) if (!parseSoftCap(state, line, isV2)) parseSoftLimitScalar(state, line, isV2);
+  return finalizeSoftLimits(state, isV2);
+};
 
+const EXECUTION_LIMIT_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, value: string) => void> = {
+  max_tool_calls_per_task: (result, value) => { if (!positiveInt(value)) throw new Error("max_tool_calls_per_task must be a positive integer"); result.maxToolCallsPerTask = Number(value); },
+  max_tool_calls_per_hour: (result, value) => { if (!positiveInt(value)) throw new Error("max_tool_calls_per_hour must be a positive integer"); result.maxToolCallsPerHour = Number(value); },
+  max_model_spend_usd_per_task: (result, value) => { if (!positiveDecimal(value)) throw new Error("max_model_spend_usd_per_task must be a positive decimal with at most 6 places"); result.maxModelSpendUsdPerTask = unquote(value); },
+  max_model_tokens_per_task: (result, value) => { if (!positiveInt(value)) throw new Error("max_model_tokens_per_task must be a positive integer"); result.maxModelTokensPerTask = Number(value); },
+};
+const parseExecutionLimitValue = (result: Record<string, unknown>, key: string, value: string): void => {
+  const parser = EXECUTION_LIMIT_VALUE_PARSERS[key];
+  if (!parser) throw new Error(`Unrecognized execution_limits policy key: ${key}`);
+  parser(result, value);
+};
+const validateExecutionLimits = (result: Record<string, unknown>): void => {
+  if (!Object.keys(result).length || !hasEnforceableExecutionLimitControl(result)) throw new Error("## execution_limits must declare at least one enforceable control");
+};
 const parseExecutionLimits = (lines: string[], isV2: boolean): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   for (const [key, value] of unique(lines, "execution_limits")) {
     if (parseGenericControl(result, key, value, isV2)) continue;
-    if (key === "max_tool_calls_per_task") {
-      if (!positiveInt(value)) throw new Error("max_tool_calls_per_task must be a positive integer");
-      result.maxToolCallsPerTask = Number(value);
-    } else if (key === "max_tool_calls_per_hour") {
-      if (!positiveInt(value)) throw new Error("max_tool_calls_per_hour must be a positive integer");
-      result.maxToolCallsPerHour = Number(value);
-    } else if (key === "max_model_spend_usd_per_task") {
-      if (!positiveDecimal(value)) throw new Error("max_model_spend_usd_per_task must be a positive decimal with at most 6 places");
-      result.maxModelSpendUsdPerTask = unquote(value);
-    } else if (key === "max_model_tokens_per_task") {
-      if (!positiveInt(value)) throw new Error("max_model_tokens_per_task must be a positive integer");
-      result.maxModelTokensPerTask = Number(value);
-    } else throw new Error(`Unrecognized execution_limits policy key: ${key}`);
+    parseExecutionLimitValue(result, key, value);
   }
-  if (!Object.keys(result).length) {
-    throw new Error("## execution_limits must declare at least one enforceable control");
-  }
-  if (!hasEnforceableExecutionLimitControl(result)) {
-    throw new Error("## execution_limits must declare at least one enforceable control");
-  }
+  validateExecutionLimits(result);
   return result;
 };
 

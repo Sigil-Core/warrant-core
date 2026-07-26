@@ -143,17 +143,29 @@ const defineSharedCommitmentRejectionTests = (): void => {
   }
 };
 
+const requiredVectorString = (value: string | undefined, field: string): string => {
+  if (value === undefined) throw new Error(`Missing ${field} in signature vector`);
+  return value;
+};
+const requiredEd25519Verifier = (adapter: CryptoAdapter): NonNullable<CryptoAdapter["verifyEd25519"]> => {
+  if (!adapter.verifyEd25519) throw new Error("Missing Ed25519 verifier in runtime adapter");
+  return adapter.verifyEd25519;
+};
 const defineSharedSignatureTests = (adapter: CryptoAdapter): void => {
   for (const vector of signatureFixture.vectors) {
     it(`matches the ${vector.id} signature vector`, async () => {
       if (vector.messageUtf8 !== undefined) {
-        const publicKey = bytesFromBase64url(signatureFixture.keys[vector.key as "rfc8032Test1"].rawPublicKeyBase64url);
-        await expect(adapter.verifyEd25519!(publicKey, bytesFromBase64url(vector.signatureBase64url!), new TextEncoder().encode(vector.messageUtf8))).resolves.toBe(true);
+        const key = requiredVectorString(vector.key, "key");
+        const publicKey = bytesFromBase64url(signatureFixture.keys[key as "rfc8032Test1"].rawPublicKeyBase64url);
+        const signature = bytesFromBase64url(requiredVectorString(vector.signatureBase64url, "signatureBase64url"));
+        await expect(requiredEd25519Verifier(adapter)(publicKey, signature, new TextEncoder().encode(vector.messageUtf8))).resolves.toBe(true);
       } else if (vector.signedMarkdown !== undefined) {
-        expect(splitSignatureBlock(vector.signedMarkdown)).toEqual({ unsigned: vector.unsigned, signature: vector.signatureBase64url });
-        expect(appendSignatureBlock(vector.unsigned!, vector.signatureBase64url!)).toBe(vector.signedMarkdown);
+        const unsigned = requiredVectorString(vector.unsigned, "unsigned");
+        const signature = requiredVectorString(vector.signatureBase64url, "signatureBase64url");
+        expect(splitSignatureBlock(vector.signedMarkdown)).toEqual({ unsigned, signature });
+        expect(appendSignatureBlock(unsigned, signature)).toBe(vector.signedMarkdown);
       } else {
-        expect(() => splitSignatureBlock(vector.markdown!)).toThrow(vector.error);
+        expect(() => splitSignatureBlock(requiredVectorString(vector.markdown, "markdown"))).toThrow(vector.error);
       }
     });
   }
