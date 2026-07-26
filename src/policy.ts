@@ -76,36 +76,6 @@ const ROOT_POLICY_SYNTAX = [
   /^deny_if\.\S+\s+(?:contains|starts_with|ends_with|matches|equals|not_equals)\s+.+$/,
 ];
 
-export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
-  const unsigned = splitSignatureBlock(markdown).unsigned;
-  const structural = maskHtmlComments(unsigned);
-  if (/^ {1,3}##\s+\S.*$/m.test(structural)) {
-    throw new Error("Indented policy headings are not supported");
-  }
-  const version = parseVersion(unsigned);
-  const isV2 = version === "2.0.0" || version === "2.1.0";
-  const sections = sectionsOf(structural);
-  if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
-  if (version !== "2.1.0" && sections.some((section) => RESOURCE_SECTIONS.has(section.name))) {
-    throw new Error("Policy 2.1 resource profiles require version 2.1.0");
-  }
-  const result: ParsedPolicy = { version };
-  for (const section of sections) {
-    const lines = cleanedLines(section.body);
-    if (section.name === "evm") result.evm = parseEvm(lines, isV2, section.body);
-    else if (section.name === "tool_calls") result.tool_calls = parseToolCalls(lines, isV2);
-    else if (section.name === "custom") {
-      const custom = parseCustom(lines, isV2);
-      if (custom !== undefined) result.custom = custom;
-    }
-    else if (section.name === "mcp") result.mcp = parseMcp(lines, isV2);
-    else if (section.name === "soft_limits") result.soft_limits = parseSoftLimits(lines, isV2);
-    else if (section.name === "execution_limits") result.execution_limits = parseExecutionLimits(lines, isV2);
-    else if (RESOURCE_SECTIONS.has(section.name)) (result as unknown as Record<string, unknown>)[section.name] = parseResource(section.name, lines);
-  }
-  return removeEmpty(result);
-}
-
 interface Section { name: string; body: string; }
 
 function sectionsOf(markdown: string): Section[] {
@@ -215,12 +185,12 @@ function unquote(value: string): string {
   return (value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")) ? value.slice(1, -1) : value;
 }
 
-function boolean(value: string, key: string, strict: boolean): boolean {
+const boolean = (value: string, key: string, strict: boolean): boolean => {
   const normalized = value.trim().toLowerCase();
   if (strict && normalized !== "true" && normalized !== "false") throw new Error(`${key} must be true or false`);
   // Policy 1.x follows the frozen Sigil Sign parser: boolean tokens are case-insensitive.
   return normalized === "true";
-}
+};
 
 const number = (value: string): number | undefined => {
   const parsed = Number.parseFloat(value);
@@ -488,6 +458,39 @@ function parseMcp(lines: string[], isV2: boolean): Record<string, unknown> {
 function actionList(value: string, key: string): string[] { const values = list(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length) throw new Error(`${key} must contain at least one entry`); if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 
+function isCanonicalRoot(value: string): boolean {
+  return value === "." || value === "/" || (value.startsWith("/") && !value.endsWith("/") && !value.includes("//") && value.split("/").every((segment) => segment !== "." && segment !== ".."));
+}
+function positiveInt(value: string): boolean { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; }
+const fixedDecimalParts = (value: string): { whole: string; fraction: string; token: string } | undefined => {
+  const match = value.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?/);
+  const whole = match?.[1];
+  if (whole === undefined || match === null) return undefined;
+  return { whole, fraction: match[2] ?? "", token: match[0] };
+};
+const decimalMicros = ({ whole, fraction }: { whole: string; fraction: string }): bigint =>
+  BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+const isCounterMicros = (micros: bigint): boolean => micros >= 1n && micros <= MAX_COUNTER_MICROS;
+const isSafeDecimalMicros = (micros: bigint): boolean => micros >= 1n && micros <= MAX_SAFE * 1_000_000n;
+const hasInvalidDecimalSuffix = (value: string): boolean => /^[\d.+-]/.test(value) || /^[eE][+-]?\d/.test(value);
+const finitePositiveNumber = (value: string): number | undefined => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+const dailyEvmLimit = (value: string): number | undefined => {
+  const raw = value.trim();
+  const parts = fixedDecimalParts(raw);
+  if (!parts || hasInvalidDecimalSuffix(raw.slice(parts.token.length))) return undefined;
+  if (!isCounterMicros(decimalMicros(parts))) return undefined;
+  return finitePositiveNumber(parts.token);
+};
+const positiveDecimal = (value: string): boolean => {
+  const raw = unquote(value.trim());
+  const parts = fixedDecimalParts(raw);
+  return parts !== undefined && parts.token === raw && isSafeDecimalMicros(decimalMicros(parts));
+};
+const required = (value: string, key: string): string => { if (!value) throw new Error(`${key} must not be empty`); return value; };
+
 function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown> {
   const result: Record<string, unknown> = {}; const caps = Object.create(null) as Record<string, Record<string, unknown>>;
   const scalarKeys = new Set<string>(); const capKeys = new Set<string>();
@@ -572,110 +575,134 @@ function hasEnforceableExecutionLimitControl(limits: Record<string, unknown> | u
   return Object.values(limits ?? {}).some((value) => value !== undefined && value !== false);
 }
 
-const parseResourceValue = (name: string, key: string, outputKey: string, value: string): unknown => {
-  if (RESOURCE_BOOLEAN_OUTPUT_KEYS.has(outputKey)) return boolean(value, key, true);
-  if (RESOURCE_NUMERIC_OUTPUT_KEYS.has(outputKey)) {
-    if (!positiveInt(value)) throw new Error(`${key} must be a positive integer`);
-    return Number(value);
-  }
-  if (RESOURCE_ACTION_OUTPUT_KEYS.has(outputKey)) return resourceActionList(value, key);
-  if (RESOURCE_ROOT_OUTPUT_KEYS.has(outputKey)) {
-    const roots = resourceList(value);
-    if (!roots.length || roots.some((root) => !isCanonicalRoot(root))) throw new Error(`${key} must contain . or canonical absolute paths`);
-    return roots;
-  }
-  if (RESOURCE_SCALAR_OUTPUT_KEYS.has(outputKey)) return required(value.trim(), key);
+const resourceNumber = (value: string, key: string): number => {
+  if (!positiveInt(value)) throw new Error(`${key} must be a positive integer`);
+  return Number(value);
+};
+const resourceRoots = (value: string, key: string): string[] => {
+  const roots = resourceList(value);
+  if (!roots.length || roots.some((root) => !isCanonicalRoot(root))) throw new Error(`${key} must contain . or canonical absolute paths`);
+  return roots;
+};
+const resourceEnum = (name: string, key: string, outputKey: string, value: string): string[] => {
   const values = resourceList(value);
   const allowed = RESOURCE_ENUMS[`${name}.${outputKey}`];
   if (allowed && values.some((entry) => !allowed.has(entry))) throw new Error(`${key} contains an unsupported value`);
   return values;
 };
+const RESOURCE_VALUE_PARSERS: Array<[Set<string>, (value: string, key: string) => unknown]> = [
+  [RESOURCE_BOOLEAN_OUTPUT_KEYS, (value, key) => boolean(value, key, true)],
+  [RESOURCE_NUMERIC_OUTPUT_KEYS, resourceNumber],
+  [RESOURCE_ACTION_OUTPUT_KEYS, resourceActionList],
+  [RESOURCE_ROOT_OUTPUT_KEYS, resourceRoots],
+  [RESOURCE_SCALAR_OUTPUT_KEYS, (value, key) => required(value.trim(), key)],
+];
+const parseResourceValue = (name: string, key: string, outputKey: string, value: string): unknown => {
+  const parser = RESOURCE_VALUE_PARSERS.find(([keys]) => keys.has(outputKey))?.[1];
+  return parser ? parser(value, key) : resourceEnum(name, key, outputKey, value);
+};
 
-const validateResourceResult = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
+const validateResourceValues = (result: Record<string, unknown>): void => {
   for (const [field, value] of Object.entries(result)) {
     if (Array.isArray(value) && value.length === 0) throw new Error(`${field} must contain at least one entry`);
   }
+};
+const validateResourceRequirements = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
   for (const requiredKey of config.required) if (!(requiredKey in result)) throw new Error(`## ${name} requires ${requiredKey}`);
   if (result.requireShim !== true) throw new Error(`## ${name} requires requireShim: true`);
-  if (name === "git" || name === "database") {
-    const allowed = result.allowedOperations as string[];
-    const approval = result.requireApproval as string[] | undefined;
-    if (approval?.some((operation) => !allowed.includes(operation))) {
-      throw new Error("require_approval must be a subset of allowed_operations");
-    }
-  }
-  if (name === "database" && (result.allowedResources as string[]).includes("*")) {
-    throw new Error("allowed_resources cannot contain bare *");
-  }
+};
+const validatesOperationApprovals = (name: string): boolean => name === "git" || name === "database";
+const validateResourceOperationApprovals = (name: string, result: Record<string, unknown>): void => {
+  if (!validatesOperationApprovals(name)) return;
+  const allowed = result.allowedOperations as string[];
+  const approval = result.requireApproval as string[] | undefined;
+  if (approval?.some((operation) => !allowed.includes(operation))) throw new Error("require_approval must be a subset of allowed_operations");
+};
+const validateDatabaseResources = (name: string, result: Record<string, unknown>): void => {
+  if (name === "database" && (result.allowedResources as string[]).includes("*")) throw new Error("allowed_resources cannot contain bare *");
+};
+const validateResourceResult = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
+  validateResourceValues(result);
+  validateResourceRequirements(name, config, result);
+  validateResourceOperationApprovals(name, result);
+  validateDatabaseResources(name, result);
 };
 
-function parseResource(name: string, lines: string[]): Record<string, unknown> {
+const parseResourceLine = (name: string, line: string): [string, string] => {
+  const match = line.match(/^([\w.]+):\s*(.*)$/);
+  const key = match?.[1];
+  const value = match?.[2];
+  if (key === undefined || value === undefined) throw new Error(`Unrecognized ${name} policy line: ${line}`);
+  return [key, value];
+};
+const uniqueResourceKey = (seen: Set<string>, name: string, key: string): void => {
+  if (seen.has(key)) throw new Error(`Duplicate ${name} policy key: ${key}`);
+  seen.add(key);
+};
+const parseResource = (name: string, lines: string[]): Record<string, unknown> => {
   const config = RESOURCE_CONFIG[name];
   if (!config) throw new Error(`Unrecognized policy block ## ${name}`);
   const result: Record<string, unknown> = {};
   const seen = new Set<string>();
-  for (const line of lines) {
-    const match = line.match(/^([\w.]+):\s*(.*)$/);
-    if (!match) throw new Error(`Unrecognized ${name} policy line: ${line}`);
-    const [, key, value] = match;
-    if (key === undefined || value === undefined) throw new Error(`Unrecognized ${name} policy line: ${line}`);
-    if (seen.has(key)) throw new Error(`Duplicate ${name} policy key: ${key}`);
-    seen.add(key);
+  for (const [key, value] of lines.map((line) => parseResourceLine(name, line))) {
+    uniqueResourceKey(seen, name, key);
     const outputKey = config.keys[key];
     if (!outputKey) throw new Error(`Unrecognized ${name} policy key: ${key}`);
     result[outputKey] = parseResourceValue(name, key, outputKey, value);
   }
   validateResourceResult(name, config, result);
   return result;
-}
+};
 
 function stripIntent(path: string): string { return path.startsWith("intent.") ? path.slice(7) : path; }
-function requiredActionList(value: string, key: string): string[] {
+const requiredActionList = (value: string, key: string): string[] => {
   const values = value.split(",").map((entry) => unquote(entry.trim()).trim());
   if (values.some((entry) => !entry)) throw new Error(`${key} must not contain empty actions`);
   if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`);
   return [...new Set(values)];
-}
-const parseGenericControl = (result: Record<string, unknown>, key: string, value: string, isV2: boolean, seen?: Set<string>): boolean => {
-  if (key !== "require_approval" && key !== "require_shim") return false;
+};
+const validateGenericControl = (key: string, isV2: boolean, seen?: Set<string>): void => {
   if (!isV2) throw new Error("Policy syntax requires version 2.0.0");
   if (seen?.has(key)) throw new Error(`Duplicate policy key: ${key}`);
   seen?.add(key);
+};
+const applyGenericControl = (result: Record<string, unknown>, key: string, value: string): void => {
   if (key === "require_approval") result.requireApproval = requiredActionList(value, key);
   else result.requireShim = boolean(value, key, true);
+};
+const parseGenericControl = (result: Record<string, unknown>, key: string, value: string, isV2: boolean, seen?: Set<string>): boolean => {
+  const generic = key === "require_approval" || key === "require_shim";
+  if (!generic) return false;
+  validateGenericControl(key, isV2, seen);
+  applyGenericControl(result, key, value);
   return true;
 };
-function isCanonicalRoot(value: string): boolean {
-  return value === "." || value === "/" || (value.startsWith("/") && !value.endsWith("/") && !value.includes("//") && value.split("/").every((segment) => segment !== "." && segment !== ".."));
-}
-function positiveInt(value: string): boolean { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; }
-const fixedDecimalParts = (value: string): { whole: string; fraction: string; token: string } | undefined => {
-  const match = value.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?/);
-  if (!match) return undefined;
-  const whole = match[1];
-  if (whole === undefined) return undefined;
-  return { whole, fraction: match[2] ?? "", token: match[0] };
-};
-const decimalMicros = ({ whole, fraction }: { whole: string; fraction: string }): bigint =>
-  BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
-function dailyEvmLimit(value: string): number | undefined {
-  const raw = value.trim();
-  const parts = fixedDecimalParts(raw);
-  if (!parts) return undefined;
-  const suffix = raw.slice(parts.token.length);
-  if (/^[\d.+-]/.test(suffix) || /^[eE][+-]?\d/.test(suffix)) return undefined;
-  const micros = decimalMicros(parts);
-  if (micros < 1n || micros > MAX_COUNTER_MICROS) return undefined;
-  const parsed = Number(parts.token);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return parsed;
-}
-const positiveDecimal = (value: string): boolean => {
-  const raw = unquote(value.trim());
-  const parts = fixedDecimalParts(raw);
-  if (!parts || parts.token !== raw) return false;
-  const micros = decimalMicros(parts);
-  return micros >= 1n && micros <= MAX_SAFE * 1_000_000n;
-};
-const required = (value: string, key: string): string => { if (!value) throw new Error(`${key} must not be empty`); return value; };
 function removeEmpty(policy: ParsedPolicy): ParsedPolicy { for (const key of Object.keys(policy) as Array<keyof ParsedPolicy>) if (key !== "version" && policy[key] && typeof policy[key] === "object" && !Object.keys(policy[key] as object).length) delete policy[key]; return policy; }
+
+export const parsePolicyMarkdown = (markdown: string): ParsedPolicy => {
+  const unsigned = splitSignatureBlock(markdown).unsigned;
+  const structural = maskHtmlComments(unsigned);
+  if (/^ {1,3}##\s+\S.*$/m.test(structural)) throw new Error("Indented policy headings are not supported");
+  const version = parseVersion(unsigned);
+  const isV2 = version === "2.0.0" || version === "2.1.0";
+  const sections = sectionsOf(structural);
+  if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
+  if (version !== "2.1.0" && sections.some((section) => RESOURCE_SECTIONS.has(section.name))) {
+    throw new Error("Policy 2.1 resource profiles require version 2.1.0");
+  }
+  const result: ParsedPolicy = { version };
+  for (const section of sections) {
+    const lines = cleanedLines(section.body);
+    if (section.name === "evm") result.evm = parseEvm(lines, isV2, section.body);
+    else if (section.name === "tool_calls") result.tool_calls = parseToolCalls(lines, isV2);
+    else if (section.name === "custom") {
+      const custom = parseCustom(lines, isV2);
+      if (custom !== undefined) result.custom = custom;
+    }
+    else if (section.name === "mcp") result.mcp = parseMcp(lines, isV2);
+    else if (section.name === "soft_limits") result.soft_limits = parseSoftLimits(lines, isV2);
+    else if (section.name === "execution_limits") result.execution_limits = parseExecutionLimits(lines, isV2);
+    else if (RESOURCE_SECTIONS.has(section.name)) (result as unknown as Record<string, unknown>)[section.name] = parseResource(section.name, lines);
+  }
+  return removeEmpty(result);
+};

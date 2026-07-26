@@ -30,51 +30,67 @@ export const KNOWN_PARITY_DIVERGENCES = new Set([
   "legacy-daily-evm-limit-precision",
 ]);
 
-const validateVersions = (record: Record<string, unknown>): string[] | undefined => {
-  if (record.versions === undefined) return undefined;
+const validatedVersions = (record: Record<string, unknown>): string[] => {
   if (!Array.isArray(record.versions) || record.versions.length === 0 || record.versions.some((version) => typeof version !== "string" || version.trim() === "")) {
     throw new Error(`Consumer compatibility case ${record.id} versions must be a non-empty string array`);
   }
-  const versions = record.versions as string[];
+  return record.versions as string[];
+};
+const versionHeaderValue = (record: Record<string, unknown>): string => {
   const versionHeader = record.markdown.match(/^version:\s*(\S+)\s*$/m);
   const version = versionHeader?.[1];
   if (!versionHeader || version === undefined) {
     throw new Error(`Consumer compatibility case ${record.id} with versions must contain a version header`);
   }
+  return version;
+};
+const validateVersions = (record: Record<string, unknown>): string[] | undefined => {
+  if (record.versions === undefined) return undefined;
+  const versions = validatedVersions(record);
+  const version = versionHeaderValue(record);
   if (!versions.includes(version)) {
     throw new Error(`Consumer compatibility case ${record.id} version header must match one of its versions`);
   }
   return versions;
 };
 
-const validateConsumerCompatibilityCase = (candidate: unknown, index: number): ConsumerCompatibilityCase => {
+const consumerCompatibilityRecord = (candidate: unknown, index: number): Record<string, unknown> => {
   if (typeof candidate !== "object" || candidate === null) {
     throw new Error(`Consumer compatibility case ${index} must be an object`);
   }
-  const record = candidate as Record<string, unknown>;
+  return candidate as Record<string, unknown>;
+};
+const validateConsumerCompatibilityIdentity = (record: Record<string, unknown>, index: number): { id: string; markdown: string } => {
   if (typeof record.id !== "string" || record.id.trim() === "") {
     throw new Error(`Consumer compatibility case ${index} must have a non-empty id`);
   }
   if (typeof record.markdown !== "string" || record.markdown.trim() === "") {
     throw new Error(`Consumer compatibility case ${record.id} must have non-empty markdown`);
   }
+  return { id: record.id, markdown: record.markdown };
+};
+const acceptedConsumerCompatibilityCase = (record: Record<string, unknown>, base: ConsumerCompatibilityCaseBase): ConsumerCompatibilityAcceptCase => {
+  if (record.errorContains !== undefined) {
+    throw new Error(`Accepted consumer compatibility case ${record.id} must not define errorContains`);
+  }
+  return { ...base, outcome: "accept", ...("canonicalPolicy" in record ? { canonicalPolicy: record.canonicalPolicy } : {}) };
+};
+const rejectedConsumerCompatibilityCase = (record: Record<string, unknown>, base: ConsumerCompatibilityCaseBase): ConsumerCompatibilityRejectCase => {
+  if (typeof record.errorContains !== "string" || record.errorContains.trim() === "") {
+    throw new Error(`Rejected consumer compatibility case ${record.id} must define a non-empty errorContains`);
+  }
+  if ("canonicalPolicy" in record) {
+    throw new Error(`Rejected consumer compatibility case ${record.id} must not define canonicalPolicy`);
+  }
+  return { ...base, outcome: "reject", errorContains: record.errorContains };
+};
+const validateConsumerCompatibilityCase = (candidate: unknown, index: number): ConsumerCompatibilityCase => {
+  const record = consumerCompatibilityRecord(candidate, index);
+  const identity = validateConsumerCompatibilityIdentity(record, index);
   const versions = validateVersions(record);
-  const base = { id: record.id, markdown: record.markdown, ...(versions ? { versions } : {}) };
-  if (record.outcome === "accept") {
-    if (record.errorContains !== undefined) {
-      throw new Error(`Accepted consumer compatibility case ${record.id} must not define errorContains`);
-    }
-    return { ...base, outcome: "accept", ...("canonicalPolicy" in record ? { canonicalPolicy: record.canonicalPolicy } : {}) };
-  }
-  if (record.outcome === "reject") {
-    if (typeof record.errorContains !== "string" || record.errorContains.trim() === "") {
-      throw new Error(`Rejected consumer compatibility case ${record.id} must define a non-empty errorContains`);
-    }
-    if ("canonicalPolicy" in record) {
-      throw new Error(`Rejected consumer compatibility case ${record.id} must not define canonicalPolicy`);
-    }
-    return { ...base, outcome: "reject", errorContains: record.errorContains };
-  }
+  const base = { ...identity, ...(versions ? { versions } : {}) };
+  if (record.outcome === "accept") return acceptedConsumerCompatibilityCase(record, base);
+  if (record.outcome === "reject") return rejectedConsumerCompatibilityCase(record, base);
   throw new Error(`Consumer compatibility case ${record.id} must have outcome accept or reject`);
 };
 
@@ -130,10 +146,11 @@ const assertConsumerCompatibilityCase = (compatibilityCase: ConsumerCompatibilit
   return assertRejectedConsumerCompatibilityCase(compatibilityCase, markdownCases);
 };
 
+const defineConsumerCompatibilityVectorTest = (runtime: string, compatibilityCase: ConsumerCompatibilityCase): void => {
+  it(`matches the ${compatibilityCase.id} consumer-compatibility vector in ${runtime}`, () => {
+    assertConsumerCompatibilityCase(compatibilityCase);
+  });
+};
 export const defineConsumerCompatibilityVectorTests = (runtime: string): void => {
-  for (const compatibilityCase of consumerCompatibilityCases) {
-    it(`matches the ${compatibilityCase.id} consumer-compatibility vector in ${runtime}`, () => {
-      assertConsumerCompatibilityCase(compatibilityCase);
-    });
-  }
+  consumerCompatibilityCases.forEach((compatibilityCase) => defineConsumerCompatibilityVectorTest(runtime, compatibilityCase));
 };
