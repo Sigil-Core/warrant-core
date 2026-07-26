@@ -458,10 +458,12 @@ function parseMcp(lines: string[], isV2: boolean): Record<string, unknown> {
 function actionList(value: string, key: string): string[] { const values = list(value); if (!values.length || values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 function resourceActionList(value: string, key: string): string[] { const values = resourceList(value); if (!values.length) throw new Error(`${key} must contain at least one entry`); if (values.some((entry) => !ACTION_PATTERN(entry))) throw new Error(`${key} must contain exact values or one trailing * wildcard`); return [...new Set(values)]; }
 
-function isCanonicalRoot(value: string): boolean {
-  return value === "." || value === "/" || (value.startsWith("/") && !value.endsWith("/") && !value.includes("//") && value.split("/").every((segment) => segment !== "." && segment !== ".."));
-}
-function positiveInt(value: string): boolean { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; }
+const hasCanonicalPathSegments = (value: string): boolean =>
+  value.split("/").every((segment) => segment !== "." && segment !== "..");
+const isCanonicalAbsoluteRoot = (value: string): boolean =>
+  value.startsWith("/") && !value.endsWith("/") && !value.includes("//") && hasCanonicalPathSegments(value);
+const isCanonicalRoot = (value: string): boolean => value === "." || value === "/" || isCanonicalAbsoluteRoot(value);
+const positiveInt = (value: string): boolean => { const raw = value.trim(); return /^\d+$/.test(raw) && BigInt(raw) >= 1n && BigInt(raw) <= MAX_SAFE; };
 const fixedDecimalParts = (value: string): { whole: string; fraction: string; token: string } | undefined => {
   const match = value.match(/^(0|[1-9]\d*)(?:\.(\d{1,6}))?/);
   const whole = match?.[1];
@@ -677,7 +679,51 @@ const parseGenericControl = (result: Record<string, unknown>, key: string, value
   applyGenericControl(result, key, value);
   return true;
 };
-function removeEmpty(policy: ParsedPolicy): ParsedPolicy { for (const key of Object.keys(policy) as Array<keyof ParsedPolicy>) if (key !== "version" && policy[key] && typeof policy[key] === "object" && !Object.keys(policy[key] as object).length) delete policy[key]; return policy; }
+const isEmptyPolicySection = (value: unknown): boolean => {
+  if (!value || typeof value !== "object") return false;
+  return Object.keys(value).length === 0;
+};
+const retainPolicyEntry = ([key, value]: [string, unknown]): boolean =>
+  key === "version" || !isEmptyPolicySection(value);
+const removeEmpty = (policy: ParsedPolicy): ParsedPolicy =>
+  Object.fromEntries(Object.entries(policy).filter(retainPolicyEntry)) as ParsedPolicy;
+
+type PolicySectionParser = (lines: string[], isV2: boolean, body: string) => Partial<ParsedPolicy>;
+const POLICY_SECTION_PARSERS: Record<string, PolicySectionParser> = {
+  evm: (lines, isV2, body) => ({ evm: parseEvm(lines, isV2, body) }),
+  tool_calls: (lines, isV2) => ({ tool_calls: parseToolCalls(lines, isV2) }),
+  custom: (lines, isV2) => {
+    const custom = parseCustom(lines, isV2);
+    return custom === undefined ? {} : { custom };
+  },
+  mcp: (lines, isV2) => ({ mcp: parseMcp(lines, isV2) }),
+  soft_limits: (lines, isV2) => ({ soft_limits: parseSoftLimits(lines, isV2) }),
+  execution_limits: (lines, isV2) => ({ execution_limits: parseExecutionLimits(lines, isV2) }),
+};
+const resourceSectionResult = (name: string, lines: string[]): Partial<ParsedPolicy> => {
+  const resource = parseResource(name, lines);
+  if (name === "repository") return { repository: resource };
+  if (name === "filesystem") return { filesystem: resource };
+  if (name === "git") return { git: resource };
+  return { database: resource };
+};
+const parsePolicySection = (section: Section, isV2: boolean): Partial<ParsedPolicy> => {
+  const lines = cleanedLines(section.body);
+  const parser = POLICY_SECTION_PARSERS[section.name];
+  if (parser) return parser(lines, isV2, section.body);
+  return resourceSectionResult(section.name, lines);
+};
+const assertPolicyCompatibility = (version: string, isV2: boolean, structural: string, sections: Section[]): void => {
+  if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
+  if (version !== "2.1.0" && sections.some((section) => RESOURCE_SECTIONS.has(section.name))) {
+    throw new Error("Policy 2.1 resource profiles require version 2.1.0");
+  }
+};
+const parsePolicySections = (version: string, isV2: boolean, sections: Section[]): ParsedPolicy => {
+  const result: ParsedPolicy = { version };
+  for (const section of sections) Object.assign(result, parsePolicySection(section, isV2));
+  return result;
+};
 
 export const parsePolicyMarkdown = (markdown: string): ParsedPolicy => {
   const unsigned = splitSignatureBlock(markdown).unsigned;
@@ -686,23 +732,6 @@ export const parsePolicyMarkdown = (markdown: string): ParsedPolicy => {
   const version = parseVersion(unsigned);
   const isV2 = version === "2.0.0" || version === "2.1.0";
   const sections = sectionsOf(structural);
-  if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
-  if (version !== "2.1.0" && sections.some((section) => RESOURCE_SECTIONS.has(section.name))) {
-    throw new Error("Policy 2.1 resource profiles require version 2.1.0");
-  }
-  const result: ParsedPolicy = { version };
-  for (const section of sections) {
-    const lines = cleanedLines(section.body);
-    if (section.name === "evm") result.evm = parseEvm(lines, isV2, section.body);
-    else if (section.name === "tool_calls") result.tool_calls = parseToolCalls(lines, isV2);
-    else if (section.name === "custom") {
-      const custom = parseCustom(lines, isV2);
-      if (custom !== undefined) result.custom = custom;
-    }
-    else if (section.name === "mcp") result.mcp = parseMcp(lines, isV2);
-    else if (section.name === "soft_limits") result.soft_limits = parseSoftLimits(lines, isV2);
-    else if (section.name === "execution_limits") result.execution_limits = parseExecutionLimits(lines, isV2);
-    else if (RESOURCE_SECTIONS.has(section.name)) (result as unknown as Record<string, unknown>)[section.name] = parseResource(section.name, lines);
-  }
-  return removeEmpty(result);
+  assertPolicyCompatibility(version, isV2, structural, sections);
+  return removeEmpty(parsePolicySections(version, isV2, sections));
 };
