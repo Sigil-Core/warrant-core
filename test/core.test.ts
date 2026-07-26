@@ -284,20 +284,40 @@ describe("warranty.md parser", () => {
     expect(parsePolicyMarkdown("version: 2.0.0\n\n## tool_calls\nallowed: http\nhttp.allowed_hosts: API.Example.Com., *.example.com").tool_calls?.httpAllowedHosts).toEqual(["api.example.com", "*.example.com"]);
   });
 
-  it("matches Sigil Sign when execution controls have no numeric limit", () => {
+  it("preserves every enforceable execution control without a numeric limit", () => {
     expect(parsePolicyMarkdown([
       "version: 2.0.0",
-      "",
-      "## tool_calls",
-      "allowed: bash",
       "",
       "## execution_limits",
       "require_approval: bash",
       "require_shim: true",
     ].join("\n"))).toEqual({
       version: "2.0.0",
-      tool_calls: { allowed: ["bash"] },
+      execution_limits: {
+        requireApproval: ["bash"],
+        requireShim: true,
+      },
     });
+  });
+
+  it("does not drop execution controls in the release gate", () => {
+    const approvalOnly = parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nrequire_approval: bash");
+    expect(approvalOnly.execution_limits).toEqual({ requireApproval: ["bash"] });
+    expect(canonicalizePolicyObject(approvalOnly)).toContain('"requireApproval":["bash"]');
+
+    const shimOnly = parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nrequire_shim: true");
+    expect(shimOnly.execution_limits).toEqual({ requireShim: true });
+    expect(canonicalizePolicyObject(shimOnly)).toContain('"requireShim":true');
+
+    const falseAlongsideApproval = parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nrequire_approval: bash\nrequire_shim: false");
+    expect(falseAlongsideApproval.execution_limits).toEqual({ requireApproval: ["bash"], requireShim: false });
+    expect(canonicalizePolicyObject(falseAlongsideApproval)).toContain('"requireShim":false');
+
+    const falseAlongsideLimit = parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 1\nrequire_shim: false");
+    expect(falseAlongsideLimit.execution_limits).toEqual({ maxToolCallsPerTask: 1, requireShim: false });
+    expect(canonicalizePolicyObject(falseAlongsideLimit)).toContain('"requireShim":false');
+
+    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nrequire_shim: false")).toThrow("at least one enforceable control");
   });
 
   it("fails closed for invalid execution limit values", () => {
@@ -373,7 +393,10 @@ describe("warranty.md parser", () => {
       "## tool_calls",
       "require_approval: bash",
     ].join("\n"))).toThrow("requires at least one allowed tool");
-    expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 5")).toThrow("enforceable policy");
+    expect(parsePolicyMarkdown("version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 5")).toEqual({
+      version: "2.0.0",
+      execution_limits: { maxToolCallsPerTask: 5 },
+    });
   });
 });
 

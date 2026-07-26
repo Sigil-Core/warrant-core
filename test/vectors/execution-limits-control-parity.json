@@ -1,0 +1,41 @@
+{
+  "format": "sigil-warrant-execution-limits-control-parity/v1",
+  "source": "sigil-sign production merge 8b55be373c0d2f3a21fc4f5bda761721ff515103",
+  "cases": [
+    {
+      "id": "approval-only",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_approval: bash",
+      "outcome": "accept",
+      "executionLimits": { "requireApproval": ["bash"] }
+    },
+    {
+      "id": "shim-only",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_shim: true",
+      "outcome": "accept",
+      "executionLimits": { "requireShim": true }
+    },
+    {
+      "id": "approval-and-shim",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_approval: bash\nrequire_shim: true",
+      "outcome": "accept",
+      "executionLimits": { "requireApproval": ["bash"], "requireShim": true }
+    },
+    {
+      "id": "false-shim-with-approval",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_approval: bash\nrequire_shim: false",
+      "outcome": "accept",
+      "executionLimits": { "requireApproval": ["bash"], "requireShim": false }
+    },
+    {
+      "id": "false-shim-with-limit",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 1\nrequire_shim: false",
+      "outcome": "accept",
+      "executionLimits": { "maxToolCallsPerTask": 1, "requireShim": false }
+    },
+    {
+      "id": "false-shim-only",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nrequire_shim: false",
+      "outcome": "reject"
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import type { CryptoAdapter, JsonValue } from "../../src/types.js";
 import launchScenarioFixture from "../vectors/launch-scenarios.json";
 import commitmentFixture from "../vectors/pg-commit-v1.json";
 import genericControlParityFixture from "../vectors/generic-control-parity.json";
+import executionLimitsControlParityFixture from "../vectors/execution-limits-control-parity.json";
 import parserHardeningFixture from "../vectors/parser-hardening.json";
 import policyFixture from "../vectors/policy-fixtures.json";
 import sigilSignParserParityFixture from "../vectors/sigil-sign-parser-parity.json";
@@ -114,6 +115,16 @@ export function defineSharedRuntimeVectorTests(runtime: string, adapter: CryptoA
     const parsed = parsePolicyMarkdown(genericControlParityFixture.markdown);
     expect(parsed).toEqual(genericControlParityFixture.canonicalPolicy);
     expect(canonicalizePolicyObject(parsed)).toBe(genericControlParityFixture.canonicalPolicyJson);
+  });
+
+  it(`does not drop execution-limit controls in ${runtime}`, () => {
+    for (const controlCase of executionLimitsControlParityFixture.cases) {
+      if (controlCase.outcome === "accept") {
+        expect(parsePolicyMarkdown(controlCase.markdown).execution_limits).toEqual(controlCase.executionLimits);
+      } else {
+        expect(() => parsePolicyMarkdown(controlCase.markdown)).toThrow("at least one enforceable control");
+      }
+    }
   });
 
   describe(`${runtime} shared policy, commitment, and signature vectors`, () => {

@@ -70,14 +70,13 @@ export function parsePolicyMarkdown(markdown: string): ParsedPolicy {
     else if (RESOURCE_SECTIONS.has(section.name)) (result as unknown as Record<string, unknown>)[section.name] = parseResource(section.name, lines);
   }
   const parsed = removeEmpty(result);
-  const modelBudget = parsed.execution_limits?.maxModelSpendUsdPerTask !== undefined
-    || parsed.execution_limits?.maxModelTokensPerTask !== undefined;
+  const hasExecutionLimitControls = hasEnforceableExecutionLimitControl(parsed.execution_limits);
   const enforceable = parsed.evm !== undefined
     || parsed.tool_calls !== undefined
     || parsed.custom !== undefined
     || parsed.mcp !== undefined
     || (isV2 && parsed.soft_limits !== undefined)
-    || modelBudget
+    || hasExecutionLimitControls
     || parsed.repository !== undefined
     || parsed.filesystem !== undefined
     || parsed.git !== undefined
@@ -480,28 +479,31 @@ function parseSoftLimits(lines: string[], isV2: boolean): Record<string, unknown
 
 function parseExecutionLimits(lines: string[], isV2: boolean): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  let hasLimit = false;
   for (const [key, value] of unique(lines, "execution_limits")) {
     if (parseGenericControl(result, key, value, isV2)) continue;
     if (key === "max_tool_calls_per_task") {
       if (!positiveInt(value)) throw new Error("max_tool_calls_per_task must be a positive integer");
       result.maxToolCallsPerTask = Number(value);
-      hasLimit = true;
     } else if (key === "max_tool_calls_per_hour") {
       if (!positiveInt(value)) throw new Error("max_tool_calls_per_hour must be a positive integer");
       result.maxToolCallsPerHour = Number(value);
-      hasLimit = true;
     } else if (key === "max_model_spend_usd_per_task") {
       if (!positiveDecimal(value)) throw new Error("max_model_spend_usd_per_task must be a positive decimal with at most 6 places");
       result.maxModelSpendUsdPerTask = unquote(value);
-      hasLimit = true;
     } else if (key === "max_model_tokens_per_task") {
       if (!positiveInt(value)) throw new Error("max_model_tokens_per_task must be a positive integer");
       result.maxModelTokensPerTask = Number(value);
-      hasLimit = true;
     } else throw new Error(`Unrecognized execution_limits policy key: ${key}`);
   }
-  return hasLimit ? result : {};
+  if (!Object.keys(result).length) return {};
+  if (!hasEnforceableExecutionLimitControl(result)) {
+    throw new Error("## execution_limits must declare at least one enforceable control");
+  }
+  return result;
+}
+
+function hasEnforceableExecutionLimitControl(limits: Record<string, unknown> | undefined): boolean {
+  return Object.values(limits ?? {}).some((value) => value !== undefined && value !== false);
 }
 
 function parseResource(name: string, lines: string[]): Record<string, unknown> {
