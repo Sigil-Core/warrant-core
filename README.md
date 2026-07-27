@@ -22,9 +22,13 @@ its SHA-1 shasum is `320456aaba51d7ecdda0575e1c1c3de0ba9c6458`, and its
 published Git head is `cebf31e1af460a1328571d5d8ba2639cc77d9c2d`. npm records
 SLSA provenance for this release.
 
-Version `0.2.2` advances the frozen Sigil Sign parser-contract commit for the
-trusted-shim activation rollout. Its immutable npm integrity, shasum, and
-published Git head are recorded after the trusted-publisher workflow completes.
+`@sigilcore/warrant-core@0.2.2` advances the frozen Sigil Sign parser-contract
+commit for the trusted-shim activation rollout. Its npm dist integrity is
+`sha512-Qz1Fea8bqARTjq+rnFzxoRBPdRQ4/2jxtPmqIt7vWBMh37jhEpygVpqzTVmFk2xd+1gWM8BgI2Wk/v6xvzdDOQ==`,
+its SHA-1 shasum is `f7376132334a36e4539243ab0a68b8c736db63e3`, and its
+published Git head is `479673ea735d0059989c68c6b25cb1b206e64b45`. Tag `v0.2.2`
+and trusted-publisher workflow run `30278830707` bind the release evidence. npm
+records SLSA provenance for this release.
 
 ## Public API
 
