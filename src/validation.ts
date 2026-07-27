@@ -214,6 +214,7 @@ const decodeInput = (raw: string | Uint8Array): { markdown?: string; error?: War
   }
 };
 
+// skipcq: JS-R1005 - Envelope branches preserve distinct signature errors and strict final-block checks.
 const inspectEnvelope = (
   raw: string | Uint8Array,
   mode: NonNullable<WarrantyValidationOptions["envelope_mode"]>,
@@ -255,7 +256,8 @@ const inspectEnvelope = (
     );
   }
 
-  const first = headers[0]!;
+  const first = headers[0];
+  if (first === undefined) return { markdown, unsigned: markdown, has_signature_header: false, errors };
   const headerIndex = first.index ?? 0;
   const unsigned = markdown.slice(0, headerIndex).replace(/[ \t\r\n]+$/, "");
   if (unsigned.length === 0) {
@@ -375,6 +377,7 @@ const sectionSlices = (
   return sections;
 };
 
+// skipcq: JS-R1005 - Version outcomes retain stable error codes for each invalid or unsupported condition.
 const validateRootVersion = (
   structural: string,
   errors: WarrantyValidationError[],
@@ -445,6 +448,7 @@ const canonicalDirectivePath = (section: string, key: string): string => {
   return `${section}.${key}`;
 };
 
+// skipcq: JS-R1005 - Section scanning deliberately combines key, duplicate, and version diagnostics by directive.
 const scanSection = (
   section: SectionSlice,
   version: string | undefined,
@@ -529,6 +533,7 @@ const scanSection = (
   }
 };
 
+// skipcq: JS-R1005 - Ordered parser-message matching maps legacy errors to stable authoring paths.
 const parserErrorPath = (message: string): string => {
   const block = message.match(/(?:block|section) ## ([\w.-]+)/i)?.[1];
   if (block !== undefined) return block.toLowerCase();
@@ -542,6 +547,7 @@ const parserErrorPath = (message: string): string => {
   return "document";
 };
 
+// skipcq: JS-R1005 - Parser error categories map directly to documented validation codes in priority order.
 const mapParserError = (error: unknown): WarrantyValidationError => {
   const message = error instanceof Error ? error.message : String(error);
   const path = parserErrorPath(message);
@@ -574,6 +580,7 @@ const AGGREGATE_PATHS = new Set<AuthoringCapabilityPath>([
   "tool_calls.http.method_rules",
 ]);
 
+// skipcq: JS-R1005 - Surface checks retain distinct availability, preservation, and constraint diagnostics.
 const surfaceErrors = (
   policy: ParsedPolicy,
   options: WarrantyValidationOptions,
@@ -680,6 +687,7 @@ const deduplicate = (
  * Parses once after exhaustive structural scanning. Callers must apply UI
  * state only when errors is empty, preserving the zero-partial-mutation rule.
  */
+// skipcq: JS-R1005 - The validation pipeline deliberately short-circuits malformed envelopes before parsing.
 export const validateAndParsePolicyMarkdown = (
   raw: string | Uint8Array,
   options: WarrantyValidationOptions = {},

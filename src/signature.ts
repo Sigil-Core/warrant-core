@@ -23,7 +23,7 @@ export class WarrantEnvelopeError extends Error {
   }
 }
 
-function decodeUtf8(raw: Uint8Array): string {
+const decodeUtf8 = (raw: Uint8Array): string => {
   try {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(raw);
   } catch {
@@ -32,15 +32,19 @@ function decodeUtf8(raw: Uint8Array): string {
       "Warrant envelope contains malformed UTF-8",
     );
   }
-}
+};
 
-function stripTrailingBytes(raw: Uint8Array): Uint8Array {
+const stripTrailingBytes = (raw: Uint8Array): Uint8Array => {
   let end = raw.length;
-  while (end > 0 && trailingByte.has(raw[end - 1]!)) end -= 1;
+  while (end > 0) {
+    const byte = raw[end - 1];
+    if (byte === undefined || !trailingByte.has(byte)) break;
+    end -= 1;
+  }
   return raw.slice(0, end);
-}
+};
 
-function assertPayload(payload: Uint8Array): Uint8Array {
+const assertPayload = (payload: Uint8Array): Uint8Array => {
   if (payload.length === 0) {
     throw new WarrantEnvelopeError(
       "WARRANT_ENVELOPE_EMPTY_POLICY",
@@ -48,18 +52,19 @@ function assertPayload(payload: Uint8Array): Uint8Array {
     );
   }
   return payload;
-}
+};
 
-function signatureHeaders(markdown: string): RegExpMatchArray[] {
+const signatureHeaders = (markdown: string): RegExpMatchArray[] => {
   const masked = maskHtmlComments(markdown);
   return [...masked.matchAll(signatureHeader)];
-}
+};
 
-function byteOffset(markdown: string, stringOffset: number): number {
+const byteOffset = (markdown: string, stringOffset: number): number => {
   return encoder.encode(markdown.slice(0, stringOffset)).length;
-}
+};
 
-function parseSignatureBlock(block: string): string | undefined {
+// skipcq: JS-R1005 - Each branch enforces a distinct final-signature envelope invariant.
+const parseSignatureBlock = (block: string): string | undefined => {
   const signatures: string[] = [];
   for (const line of block.split("\n")) {
     const value = signatureValue.exec(line)?.[1];
@@ -102,9 +107,9 @@ function parseSignatureBlock(block: string): string | undefined {
     );
   }
   return signatures[0];
-}
+};
 
-export function signedEnvelopeParse(raw: Uint8Array): SignedEnvelope {
+export const signedEnvelopeParse = (raw: Uint8Array): SignedEnvelope => {
   const markdown = decodeUtf8(raw);
   const headers = signatureHeaders(markdown);
   if (headers.length === 0) {
@@ -119,14 +124,20 @@ export function signedEnvelopeParse(raw: Uint8Array): SignedEnvelope {
       "Warrant envelope contains duplicate signature headers",
     );
   }
-  const header = headers[0]!;
-  const headerIndex = header.index!;
+  const header = headers[0];
+  if (header === undefined || header.index === undefined) {
+    throw new WarrantEnvelopeError(
+      "WARRANT_ENVELOPE_UNEXPECTED_HEADER",
+      "Signed Warrant envelope has an invalid signature header",
+    );
+  }
+  const headerIndex = header.index;
   const payload = assertPayload(stripTrailingBytes(raw.slice(0, byteOffset(markdown, headerIndex))));
   const signature = parseSignatureBlock(markdown.slice(headerIndex + header[0].length));
   return { payload, ...(signature ? { signature } : {}) };
-}
+};
 
-export function unsignedSigningPayload(raw: Uint8Array): Uint8Array {
+export const unsignedSigningPayload = (raw: Uint8Array): Uint8Array => {
   const markdown = decodeUtf8(raw);
   if (signatureHeaders(markdown).length > 0) {
     throw new WarrantEnvelopeError(
@@ -135,9 +146,9 @@ export function unsignedSigningPayload(raw: Uint8Array): Uint8Array {
     );
   }
   return assertPayload(stripTrailingBytes(raw));
-}
+};
 
-export function emit(payload: Uint8Array, signature: string): Uint8Array {
+export const emit = (payload: Uint8Array, signature: string): Uint8Array => {
   decodeUtf8(payload);
   if (!/^[A-Za-z0-9_-]+$/.test(signature)) {
     throw new Error("Signature must be base64url");
@@ -148,9 +159,9 @@ export function emit(payload: Uint8Array, signature: string): Uint8Array {
   result.set(signable);
   result.set(suffix, signable.length);
   return result;
-}
+};
 
-export function splitSignatureBlock(markdown: string): SplitSignatureBlock {
+export const splitSignatureBlock = (markdown: string): SplitSignatureBlock => {
   // This compatibility wrapper deliberately retains the published string API.
   // New signing and verification paths must use the byte-level functions above.
   const masked = maskHtmlComments(markdown);
@@ -162,12 +173,12 @@ export function splitSignatureBlock(markdown: string): SplitSignatureBlock {
   const signature = legacySignatureValue.exec(block.trim())?.[1];
   if (!signature) throw new Error("Signature block must contain only sigil-sig");
   return { unsigned, signature };
-}
+};
 
-export function appendSignatureBlock(unsigned: string, signature: string): string {
+export const appendSignatureBlock = (unsigned: string, signature: string): string => {
   if (!/^[A-Za-z0-9_-]+$/.test(signature)) throw new Error("Signature must be base64url");
   if (legacySignatureHeader.test(maskHtmlComments(unsigned))) {
     throw new Error("Unsigned policy already contains a signature block");
   }
   return `${unsigned.trimEnd()}\n\n## signature\nsigil-sig: ${signature}\n`;
-}
+};

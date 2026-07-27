@@ -421,6 +421,7 @@ const outputKeyByPath: Readonly<Record<string, string>> = {
 const camelCaseDirective = (value: string): string =>
   value.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
 
+// skipcq: JS-R1005 - The ordered path fallbacks form the public capability-path compatibility mapping.
 const outputPathForCanonicalPath = (path: string): string => {
   const explicit = outputKeyByPath[path];
   if (explicit !== undefined) return explicit;
@@ -444,6 +445,7 @@ const directValue = (policy: ParsedPolicy, outputPath: string): unknown => {
   return value;
 };
 
+// skipcq: JS-R1005 - Wildcard paths require separate stable extraction rules for each policy family.
 const dynamicValues = (policy: ParsedPolicy, path: string): unknown[] => {
   if (path.startsWith("evm.token.*.")) {
     const field = path.slice("evm.token.*.".length);
@@ -489,6 +491,7 @@ const dynamicValues = (policy: ParsedPolicy, path: string): unknown[] => {
   return [];
 };
 
+// skipcq: JS-R1005 - This dispatch is the auditable mapping from capability paths to parsed policy values.
 export const capabilityValuesForPath = (
   policy: ParsedPolicy,
   path: AuthoringCapabilityPath,
@@ -508,6 +511,7 @@ export const capabilityValuesForPath = (
   return value === undefined ? [] : [value];
 };
 
+// skipcq: JS-R1005 - Explicit version branches retain the supported Policy version contract in one place.
 export const policyVersionRange = (version: string): PolicyVersionRange | undefined => {
   const match = version.match(/^(\d+)\.(\d+)\.\d+$/);
   if (!match) return undefined;
@@ -536,6 +540,7 @@ export const isCapabilityAvailable = (
 const constraintValues = (value: unknown): readonly unknown[] =>
   Array.isArray(value) ? value : [value];
 
+// skipcq: JS-R1005 - Constraint-kind branches produce the precise surface diagnostics promised to authors.
 export const runRepresentabilityConstraints = (
   path: AuthoringCapabilityPath,
   surface: AuthoringSurface,

@@ -125,6 +125,7 @@ function isLikelyVersionKeyTypo(candidate: string): boolean {
     : isOneDeletionAway(target, source);
 }
 
+// skipcq: JS-R1005 - Root-version rejection branches preserve distinct, user-facing grammar diagnostics.
 function parseVersion(markdown: string): string {
   const structural = maskHtmlComments(markdown);
   const firstSection = structural.search(/^##\s+/m);
@@ -397,6 +398,7 @@ const parseEvmChainHeader = (state: EvmParserState, line: string): boolean => {
 };
 const isEvmChainActionMapping = (state: EvmParserState, line: string): boolean =>
   state.chains && /^"?\d+"?\s*:\s*.+$/.test(line);
+// skipcq: JS-R1005 - Separate EVM requirements deliberately retain their specific rejection messages.
 const ensureEvmRequirements = (result: Record<string, unknown>): void => {
   if (!Array.isArray(result.allowedActions) || result.allowedActions.length === 0) throw new Error("## evm requires at least one allowed_action");
   if (!Array.isArray(result.allowedChains) || result.allowedChains.length === 0) throw new Error("## evm requires at least one positive allowed_chain");
@@ -471,11 +473,13 @@ const TOOL_CALL_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, 
   "http.allowed_hosts": (result, _key, value, isV2) => parseToolCallHttpHosts(result, value, isV2),
 };
 const HTTP_METHOD_RULE_KEY = /^http\.method_rules\.([A-Za-z]+)\.(require_query_matches|deny)$/;
+// skipcq: JS-R1005 - HTTP method-rule branches encode the two supported directives and their invariants.
 const parseHttpMethodRule = (result: Record<string, unknown>, key: string, value: string): boolean => {
   const match = key.match(HTTP_METHOD_RULE_KEY);
   if (!match) return false;
-  const method = match[1]!;
-  const field = match[2]!;
+  const method = match[1];
+  const field = match[2];
+  if (method === undefined || field === undefined) return false;
   if (!HTTP_METHODS.has(method)) {
     throw new Error(`http.method_rules method ${method} must be an uppercase supported HTTP method`);
   }
@@ -505,14 +509,18 @@ const validateV2ToolCalls = (result: Record<string, unknown>): void => {
     throw new Error("## tool_calls must declare at least one enforceable rule or control");
   }
 };
+// skipcq: JS-R1005 - Per-line branches preserve parser ordering, duplicate detection, and compatibility errors.
 const parseToolCalls = (lines: string[], isV2: boolean): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   const seen = new Set<string>();
   for (const line of lines) {
     const match = line.match(/^([\w.]+):\s*(.*)$/);
     if (!match) throw new Error(`Unrecognized tool_calls policy line: ${line}`);
-    const key = match[1]!;
-    const value = match[2]!;
+    const key = match[1];
+    const value = match[2];
+    if (key === undefined || value === undefined) {
+      throw new Error(`Unrecognized tool_calls policy line: ${line}`);
+    }
     if (seen.has(key)) throw new Error(`Duplicate tool_calls policy key: ${key}`);
     seen.add(key);
     if (parseGenericControl(result, key, value, isV2)) continue;
@@ -903,11 +911,6 @@ const validateResourceValues = (result: Record<string, unknown>): void => {
     if (Array.isArray(value) && value.length === 0) throw new Error(`${field} must contain at least one entry`);
   }
 };
-const validateResourceRequirements = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
-  void name;
-  void config;
-  void result;
-};
 const validatesOperationApprovals = (name: string): boolean => name === "git" || name === "database";
 const validateResourceOperationApprovals = (name: string, result: Record<string, unknown>): void => {
   if (!validatesOperationApprovals(name)) return;
@@ -919,9 +922,8 @@ const validateResourceOperationApprovals = (name: string, result: Record<string,
 const validateDatabaseResources = (name: string, result: Record<string, unknown>): void => {
   if (name === "database" && (result.allowedResources as string[] | undefined)?.includes("*")) throw new Error("allowed_resources cannot contain bare *");
 };
-const validateResourceResult = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
+const validateResourceResult = (name: string, result: Record<string, unknown>): void => {
   validateResourceValues(result);
-  validateResourceRequirements(name, config, result);
   validateResourceOperationApprovals(name, result);
   validateDatabaseResources(name, result);
 };
@@ -948,7 +950,7 @@ const parseResource = (name: string, lines: string[]): Record<string, unknown> =
     if (!outputKey) throw new Error(`Unrecognized ${name} policy key: ${key}`);
     result[outputKey] = parseResourceValue(name, key, outputKey, value);
   }
-  validateResourceResult(name, config, result);
+  validateResourceResult(name, result);
   return result;
 };
 
@@ -987,6 +989,7 @@ const parsePolicySection = (section: Section, isV2: boolean): Partial<ParsedPoli
   if (parser) return parser(lines, isV2, section.body);
   return resourceSectionResult(section.name, lines);
 };
+// skipcq: JS-R1005 - Version gates stay co-located so Policy 2.1 feature rejection remains auditable.
 const assertPolicyCompatibility = (version: string, isV2: boolean, structural: string, sections: Section[]): void => {
   const { major, minor } = policyVersionParts(version);
   if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
@@ -1019,12 +1022,14 @@ export const parsePolicyMarkdown = (markdown: string): ParsedPolicy => {
   return removeEmpty(parsePolicySections(version, isV2, sections));
 };
 
+// skipcq: JS-R1005 - Advisory branches map each optional resource-profile field to a stable warning.
 export const lintPolicyAdvisories = (policy: ParsedPolicy): PolicyAdvisory[] => {
   const advisories: PolicyAdvisory[] = [];
   for (const name of RESOURCE_SECTIONS) {
     const profile = policy[name as keyof ParsedPolicy];
     if (!profile || typeof profile !== "object") continue;
-    const config = RESOURCE_CONFIG[name]!;
+    const config = RESOURCE_CONFIG[name];
+    if (config === undefined) continue;
     for (const field of config.required) {
       if (field in profile) continue;
       advisories.push({
