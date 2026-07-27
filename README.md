@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.2.1
+npm install @sigilcore/warrant-core@0.2.2
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -21,6 +21,10 @@ Security-sensitive consumers must pin the full reviewed version. Do not use a ca
 its SHA-1 shasum is `320456aaba51d7ecdda0575e1c1c3de0ba9c6458`, and its
 published Git head is `cebf31e1af460a1328571d5d8ba2639cc77d9c2d`. npm records
 SLSA provenance for this release.
+
+Version `0.2.2` advances the frozen Sigil Sign parser-contract commit for the
+trusted-shim activation rollout. Its immutable npm integrity, shasum, and
+published Git head are recorded after the trusted-publisher workflow completes.
 
 ## Public API
 
