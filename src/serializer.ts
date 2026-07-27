@@ -19,6 +19,20 @@ const scalar = (value: unknown, path: string): string => {
   return String(value);
 };
 
+const customScalar = (value: unknown, path: string): string => {
+  const serialized = scalar(value, path);
+  return typeof value === "string" && value.trim() !== value
+    ? `"${serialized}"`
+    : serialized;
+};
+
+const customCsv = (value: unknown, path: string): string => {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" && typeof item !== "number")) {
+    throw new TypeError(`${path} must be a string or number array`);
+  }
+  return value.map((item) => customScalar(item, path)).join(", ");
+};
+
 const add = (lines: string[], key: string, value: unknown, path: string, array = false): void => {
   if (value === undefined) return;
   lines.push(`${key}: ${array ? csv(value, path) : scalar(value, path)}`);
@@ -65,7 +79,7 @@ const resourceSection = (name: string, value: unknown): string | undefined => {
   for (const [directive, property, array] of resourceKeys[name] ?? []) {
     add(lines, directive, value[property], `${name}.${property}`, array);
   }
-  return lines.length ? `## ${name}\n${lines.join("\n")}` : undefined;
+  return lines.length ? `## ${name}\n${lines.join("\n")}` : `## ${name}`;
 };
 
 const evmSection = (value: unknown): string | undefined => {
@@ -131,6 +145,28 @@ const serializeSimpleSection = (name: string, value: unknown, keys: readonly [st
   return lines.length ? `## ${name}\n${lines.join("\n")}` : undefined;
 };
 
+const softLimitsSection = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new TypeError("soft_limits must be an object");
+  const lines: string[] = [];
+  add(lines, "daily_evm_limit_eth", value.dailyEvmLimitEth, "soft_limits.dailyEvmLimitEth");
+  add(lines, "daily_tool_calls", value.dailyToolCalls, "soft_limits.dailyToolCalls");
+  if (isRecord(value.caps)) {
+    for (const name of Object.keys(value.caps).sort()) {
+      const cap = value.caps[name];
+      if (!isRecord(cap)) throw new TypeError(`soft_limits.caps.${name} must be an object`);
+      add(lines, `cap.${name}.max_count`, cap.maxCount, `soft_limits.caps.${name}.maxCount`);
+      add(lines, `cap.${name}.max_sum_usd`, cap.maxSumUsd, `soft_limits.caps.${name}.maxSumUsd`);
+      add(lines, `cap.${name}.window`, cap.window, `soft_limits.caps.${name}.window`);
+      add(lines, `cap.${name}.action`, cap.action, `soft_limits.caps.${name}.action`);
+      add(lines, `cap.${name}.group_by`, cap.groupBy, `soft_limits.caps.${name}.groupBy`);
+      add(lines, `cap.${name}.amount_field`, cap.amountField, `soft_limits.caps.${name}.amountField`);
+    }
+  }
+  genericControls(lines, value, "soft_limits");
+  return lines.length ? `## soft_limits\n${lines.join("\n")}` : undefined;
+};
+
 const customSection = (value: unknown): string | undefined => {
   if (value === undefined) return undefined;
   if (!isRecord(value) || !Array.isArray(value.rules)) throw new TypeError("custom.rules must be an array");
@@ -141,11 +177,11 @@ const customSection = (value: unknown): string | undefined => {
       const action = typeof rule.actionScope === "string" ? `[action=${rule.actionScope}]` : "";
       const attested = rule.attested === true ? " attested" : "";
       const operator = typeof rule.operator === "string" ? ` ${rule.operator}` : "";
-      lines.push(`allow_only${action}.${scalar(rule.fieldPath, "custom.fieldPath")}${attested}${operator}: ${csv(rule.values, "custom.values")}`);
+      lines.push(`allow_only${action}.${scalar(rule.fieldPath, "custom.fieldPath")}${attested}${operator}: ${customCsv(rule.values, "custom.values")}`);
     } else if (rule.type === "field") {
-      lines.push(`deny_if.${scalar(rule.fieldPath, "custom.fieldPath")} ${scalar(rule.operator, "custom.operator")} ${scalar(rule.value, "custom.value")}`);
+      lines.push(`deny_if.${scalar(rule.fieldPath, "custom.fieldPath")} ${scalar(rule.operator, "custom.operator")} ${customScalar(rule.value, "custom.value")}`);
     } else if (rule.type === "deny_string") {
-      lines.push(`deny_string: ${scalar(rule.value, "custom.value")}`);
+      lines.push(`deny_string: ${customScalar(rule.value, "custom.value")}`);
     } else throw new TypeError(`Unsupported custom rule type ${rule.type}`);
   }
   genericControls(lines, value, "custom");
@@ -162,7 +198,7 @@ export const serializePolicyMarkdown = (policy: ParsedPolicy): string => {
     resourceSection("git", policy.git), resourceSection("database", policy.database), evmSection(policy.evm),
     toolCallsSection(policy.tool_calls), customSection(policy.custom),
     serializeSimpleSection("mcp", policy.mcp, [["allowed_servers", "allowedServers", true], ["allowed_tools", "allowedTools", true], ["blocked_tools", "blockedTools", true]]),
-    serializeSimpleSection("soft_limits", policy.soft_limits, [["daily_evm_limit_eth", "dailyEvmLimitEth", false], ["daily_tool_calls", "dailyToolCalls", false]]),
+    softLimitsSection(policy.soft_limits),
     serializeSimpleSection("execution_limits", policy.execution_limits, [["max_tool_calls_per_task", "maxToolCallsPerTask", false], ["max_tool_calls_per_hour", "maxToolCallsPerHour", false], ["max_model_spend_usd_per_task", "maxModelSpendUsdPerTask", false], ["max_model_tokens_per_task", "maxModelTokensPerTask", false]]),
   ].filter((section): section is string => section !== undefined);
   return [`version: ${policy.version}`, ...sections].join("\n\n");

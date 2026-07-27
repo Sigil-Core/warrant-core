@@ -68,6 +68,17 @@ describe("Phase 1 authoring core", () => {
     expect(parsePolicyMarkdown(serialized)).toEqual(input);
   });
 
+  it("preserves named soft-limit caps, empty resource profiles, and quoted custom whitespace", () => {
+    const input = parsePolicyMarkdown("version: 2.1.1\n\n## repository\n\n## custom\ndeny_string: \" leading \"\ndeny_if.intent.note equals \" trailing \"\n\n## soft_limits\ncap.requests.max_count: 5\ncap.requests.window: day\ncap.requests.action: email.send\ncap.budget.max_sum_usd: 1.25\ncap.budget.window: task\ncap.budget.action: worker.*\ncap.budget.amount_field: amount_usd");
+    const serialized = serializePolicyMarkdown(input);
+    expect(serialized).toContain("## repository");
+    expect(serialized).toContain('deny_string: " leading "');
+    expect(serialized).toContain('deny_if.note equals " trailing "');
+    expect(serialized).toContain("cap.requests.max_count: 5");
+    expect(serialized).toContain("cap.budget.amount_field: amount_usd");
+    expect(parsePolicyMarkdown(serialized)).toEqual(input);
+  });
+
   it("reports independent errors in stable order without returning a partial policy", () => {
     const result = validateAndParsePolicyMarkdown("version: 2.0.0\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\ncalldata_unknown_selector: deny\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.deny: true\n\n## signature\nsigil-sig: bad\ntrailing");
     expect(result.policy).toBeUndefined();
@@ -90,5 +101,12 @@ describe("Phase 1 authoring core", () => {
       version: "2.1.1",
       repository: { roots: ["."], requireShim: false },
     });
+  });
+
+  it("routes signed envelopes away from surfaces that cannot import them", () => {
+    const raw = "version: 2.1.1\n\n## signature\nsigil-sig: abc\n";
+    expect(validateAndParsePolicyMarkdown(raw, { surface: "manual-form" }).errors)
+      .toMatchObject([{ code: "WARRANT_SURFACE_CANNOT_IMPORT", path: "signature.sigil-envelope-v1" }]);
+    expect(validateAndParsePolicyMarkdown(raw, { surface: "manual-advanced" }).errors).toEqual([]);
   });
 });

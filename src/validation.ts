@@ -62,6 +62,7 @@ export interface WarrantyValidationResult {
 interface EnvelopeInspection {
   readonly markdown?: string;
   readonly unsigned?: string;
+  readonly has_signature_header: boolean;
   readonly errors: readonly WarrantyValidationError[];
 }
 
@@ -218,7 +219,7 @@ const inspectEnvelope = (
   mode: NonNullable<WarrantyValidationOptions["envelope_mode"]>,
 ): EnvelopeInspection => {
   const decoded = decodeInput(raw);
-  if (decoded.error !== undefined) return { errors: [decoded.error] };
+  if (decoded.error !== undefined) return { has_signature_header: false, errors: [decoded.error] };
   const markdown = decoded.markdown ?? "";
   const masked = maskHtmlComments(markdown);
   const headers = [...masked.matchAll(SIGNATURE_HEADER)];
@@ -233,7 +234,7 @@ const inspectEnvelope = (
         ),
       );
     }
-    return { markdown, unsigned: markdown, errors };
+    return { markdown, unsigned: markdown, has_signature_header: false, errors };
   }
   if (mode === "unsigned-signing") {
     errors.push(
@@ -313,7 +314,7 @@ const inspectEnvelope = (
       ),
     );
   }
-  return { markdown, unsigned, errors };
+  return { markdown, unsigned, has_signature_header: true, errors };
 };
 
 interface SectionSlice {
@@ -576,12 +577,31 @@ const AGGREGATE_PATHS = new Set<AuthoringCapabilityPath>([
 const surfaceErrors = (
   policy: ParsedPolicy,
   options: WarrantyValidationOptions,
+  hasSignatureHeader: boolean,
 ): WarrantyValidationError[] => {
   if (options.surface === undefined) return [];
   const surface = options.surface;
   const dimension = options.dimension ?? "import";
   const requirePreservation = options.require_preservation ?? dimension === "import";
   const errors: WarrantyValidationError[] = [];
+  if (
+    hasSignatureHeader
+    && !isCapabilityAvailable("signature.sigil-envelope-v1", surface, dimension, policy.version)
+  ) {
+    const code = `WARRANT_SURFACE_CANNOT_${dimension.toUpperCase()}` as
+      | "WARRANT_SURFACE_CANNOT_AUTHOR"
+      | "WARRANT_SURFACE_CANNOT_IMPORT"
+      | "WARRANT_SURFACE_CANNOT_PRESERVE"
+      | "WARRANT_SURFACE_CANNOT_DEPLOY";
+    errors.push(
+      issue(
+        code,
+        "signature.sigil-envelope-v1",
+        `${surface} cannot ${dimension} signature.sigil-envelope-v1`,
+        surface === "manual-advanced" ? "invalid-policy" : "use-manual-advanced",
+      ),
+    );
+  }
   for (const path of Object.keys(AUTHORING_CAPABILITY_MANIFEST) as AuthoringCapabilityPath[]) {
     if (AGGREGATE_PATHS.has(path) || path === "signature.sigil-envelope-v1") continue;
     const values = capabilityValuesForPath(policy, path);
@@ -680,7 +700,7 @@ export const validateAndParsePolicyMarkdown = (
   } catch (error) {
     errors.push(mapParserError(error));
   }
-  if (policy !== undefined) errors.push(...surfaceErrors(policy, options));
+  if (policy !== undefined) errors.push(...surfaceErrors(policy, options, envelope.has_signature_header));
   const uniqueErrors = deduplicate(errors);
   return uniqueErrors.length === 0 && policy !== undefined
     ? { policy, errors: uniqueErrors }
