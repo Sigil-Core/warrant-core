@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "a6673f9c8b50f6b8fca5f4fd15cbc6c42671f656",
+  "sigilSignCommit": "48fd37520fe0a3e9f0539b711bcfb60a905390b3",
   "cases": [
     {
       "id": "evm-default-max-transaction",

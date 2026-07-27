@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.2.1
+npm install @sigilcore/warrant-core@0.2.2
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -21,6 +21,10 @@ Security-sensitive consumers must pin the full reviewed version. Do not use a ca
 its SHA-1 shasum is `320456aaba51d7ecdda0575e1c1c3de0ba9c6458`, and its
 published Git head is `cebf31e1af460a1328571d5d8ba2639cc77d9c2d`. npm records
 SLSA provenance for this release.
+
+Version `0.2.2` advances the frozen Sigil Sign parser-contract commit for the
+trusted-shim activation rollout. Its immutable npm integrity, shasum, and
+published Git head are recorded after the trusted-publisher workflow completes.
 
 ## Public API
 
@@ -173,7 +177,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against Sigil Sign production merge `a6673f9c8b50f6b8fca5f4fd15cbc6c42671f656`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this older Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against reviewed Sigil Sign trusted-shim activation commit `48fd37520fe0a3e9f0539b711bcfb60a905390b3`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign
