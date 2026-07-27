@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.1.1
+npm install @sigilcore/warrant-core@0.2.0
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -24,13 +24,18 @@ import {
   hashPgCommitV1,
   hashPolicy,
   parsePolicyMarkdown,
+  serializePolicyMarkdown,
+  signedEnvelopeParse,
   splitSignatureBlock,
+  unsignedSigningPayload,
+  validateAndParsePolicyMarkdown,
+  validatePolicyMarkdown,
 } from "@sigilcore/warrant-core";
 ```
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts Policy 1.x, 2.0.0, and 2.1.0, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, malformed explicit limits, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, empty Policy 2.1 resource lists, and incomplete resource profiles. Version 0.1.1 intentionally hardens configured numeric safety controls across every supported policy version: malformed or nonpositive transaction, consensus, and daily limits reject rather than silently removing enforcement, and token decimals must be a complete integer from 0 through 36. A `matches` declaration uses the same comma-separated list semantics as Sigilcore's Manual Warrant and Warrant Builder parser. |
+| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts unversioned Policy 0.x, Policy 1.x, 2.0.x, and 2.1.x policy input, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, malformed explicit limits, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, and empty Policy 2.1 resource lists. Policy 2.1 resource profiles may omit fields or `require_shim`; use `lintPolicyAdvisories` for their non-blocking authoring warnings. Version 0.2.0 adds the public Policy 2.1 authoring core and strict signed-envelope handling while retaining the 0.1.1 numeric safety hardening: malformed or nonpositive transaction, consensus, and daily limits reject rather than silently removing enforcement, and token decimals must be a complete integer from 0 through 36. A `matches` declaration uses the same comma-separated list semantics as Sigilcore's Manual Warrant and Warrant Builder parser. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |
@@ -40,6 +45,13 @@ import {
 | `hashPgCommitV1(adapter, intent)` | SHA-256 lowercase hexadecimal digest of `pgCommitV1Bytes(intent)`. |
 | `splitSignatureBlock(markdown)` | Splits a final `## signature` block and returns `{ unsigned, signature? }`. It rejects a signature block without `sigil-sig` and rejects a later section after it. It trims trailing whitespace from `unsigned`. |
 | `appendSignatureBlock(unsigned, signature)` | Appends the standard final signature block. `signature` must be base64url text. It trims trailing whitespace from `unsigned` and always finishes with one newline. |
+| `signedEnvelopeParse(raw)` | Validates a signed `sigil-envelope-v1` byte envelope and returns its exact payload bytes plus an optional signature for an empty placeholder block. |
+| `unsignedSigningPayload(raw)` | Validates unsigned UTF-8 source and returns its signing payload after stripping ASCII space, tab, CR, and LF bytes only. |
+| `emit(payload, signature)` | Emits the canonical signed envelope for a validated unsigned payload. |
+| `validatePolicyMarkdown(markdown, options?)` | Returns all independent authoring diagnostics as stable `{ code, path, message, surface_hint }` values. |
+| `validateAndParsePolicyMarkdown(markdown, options?)` | Returns the complete diagnostic list and, only on success, the parsed policy. Callers apply authoring state only when `errors` is empty. |
+| `serializePolicyMarkdown(policy)` | Emits the canonical Phase 1 Markdown body for a parsed policy. Page cutover remains a later phase. |
+| `AUTHORING_CAPABILITY_MANIFEST` | Executable per-field author/import/preserve/deploy contract for `manual-form`, `manual-advanced`, and `builder`. |
 
 The root entry point also exports the `ParsedPolicy`, `CryptoAdapter`, `JsonValue`, and `SplitSignatureBlock` types.
 
@@ -105,6 +117,12 @@ The Node adapter accepts Ed25519 PKCS#8 private-key bytes for signing. Its verif
 
 ## Signature boundary
 
+New signing and verification integrations use `signedEnvelopeParse`,
+`unsignedSigningPayload`, and `emit`. They validate UTF-8, preserve BOM and
+Unicode whitespace bytes, and strip only trailing ASCII space, tab, CR, and LF.
+The older string helpers remain compatibility wrappers and are not an exact-byte
+signing API.
+
 `splitSignatureBlock` and `appendSignatureBlock` operate on Warrant text structure. They do not hash, sign, verify, base64url-decode, validate policy semantics, or select a trusted public key.
 
 Closed HTML comments are ignored when locating policy and signature structure. A standalone `-->` remains literal policy text, while any `<!--` without a later closer rejects the artifact.
@@ -153,4 +171,4 @@ The initial npm package bootstrap is complete. The following steps are a non-rep
 5. The npm package settings were configured with the GitHub Actions trusted publisher for organization `Sigil-Core`, repository `warrant-core`, workflow filename `publish.yml`, and the `npm publish` permission.
 6. The reviewed stable `0.1.0` commit set `package.json` and `package-lock.json` to `0.1.0` and used the exact `v0.1.0` tag. The workflow published that immutable first stable version through npm OIDC.
 
-Do not repeat the bootstrap or use owner-authenticated publication for a later release. For every later stable release, including `0.1.1`, update the package and lockfile to the exact new version and push the matching `v` tag so the configured trusted publisher runs `.github/workflows/publish.yml`. The workflow intentionally contains no npm write token. See npm's [trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/) for the current registry requirements.
+Do not repeat the bootstrap or use owner-authenticated publication for a later release. For every later stable release, including `0.2.0`, update the package and lockfile to the exact new version and push the matching `v` tag so the configured trusted publisher runs `.github/workflows/publish.yml`. The workflow intentionally contains no npm write token. See npm's [trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/) for the current registry requirements.

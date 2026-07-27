@@ -49,6 +49,10 @@ jobs:
             package/dist/canonical.d.ts.map \
             package/dist/canonical.js \
             package/dist/canonical.js.map \
+            package/dist/capabilities.d.ts \
+            package/dist/capabilities.d.ts.map \
+            package/dist/capabilities.js \
+            package/dist/capabilities.js.map \
             package/dist/commitment.d.ts \
             package/dist/commitment.d.ts.map \
             package/dist/commitment.js \
@@ -81,6 +85,10 @@ jobs:
             package/dist/policy.d.ts.map \
             package/dist/policy.js \
             package/dist/policy.js.map \
+            package/dist/serializer.d.ts \
+            package/dist/serializer.d.ts.map \
+            package/dist/serializer.js \
+            package/dist/serializer.js.map \
             package/dist/signature.d.ts \
             package/dist/signature.d.ts.map \
             package/dist/signature.js \
@@ -89,6 +97,10 @@ jobs:
             package/dist/types.d.ts.map \
             package/dist/types.js \
             package/dist/types.js.map \
+            package/dist/validation.d.ts \
+            package/dist/validation.d.ts.map \
+            package/dist/validation.js \
+            package/dist/validation.js.map \
             package/package.json) \
             <(tar -tzf "$package_tgz" | sort)
 

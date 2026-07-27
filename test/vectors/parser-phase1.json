@@ -1,0 +1,149 @@
+{
+  "format": "warrant-core-authoring-parity-phase1/v1",
+  "cases": [
+    {
+      "id": "versioned-0-x",
+      "outcome": "accept",
+      "markdown": "version: 0.7.9\n\n## tool_calls\nallowed: bash",
+      "canonicalPolicy": {
+        "version": "0.7.9",
+        "tool_calls": { "allowed": ["bash"] }
+      }
+    },
+    {
+      "id": "versioned-1-x",
+      "outcome": "accept",
+      "markdown": "version: 1.8.4\n\n## tool_calls\nallowed: bash",
+      "canonicalPolicy": {
+        "version": "1.8.4",
+        "tool_calls": { "allowed": ["bash"] }
+      }
+    },
+    {
+      "id": "versioned-2-0-x",
+      "outcome": "accept",
+      "markdown": "version: 2.0.5\n\n## tool_calls\nallowed: bash",
+      "canonicalPolicy": {
+        "version": "2.0.5",
+        "tool_calls": { "allowed": ["bash"] }
+      }
+    },
+    {
+      "id": "versioned-2-1-x",
+      "outcome": "accept",
+      "markdown": "version: 2.1.1\n\n## repository\nroots: .",
+      "canonicalPolicy": {
+        "version": "2.1.1",
+        "repository": { "roots": ["."] }
+      }
+    },
+    {
+      "id": "profile-require-shim-false",
+      "outcome": "accept",
+      "markdown": "version: 2.1.7\n\n## repository\nroots: .\nrequire_shim: false",
+      "canonicalPolicy": {
+        "version": "2.1.7",
+        "repository": { "roots": ["."], "requireShim": false }
+      }
+    },
+    {
+      "id": "profile-fields-absent",
+      "outcome": "accept",
+      "markdown": "version: 2.1.4\n\n## repository",
+      "canonicalPolicy": {
+        "version": "2.1.4",
+        "repository": {}
+      }
+    },
+    {
+      "id": "newer-2-minor",
+      "outcome": "reject",
+      "markdown": "version: 2.2.0\n\n## tool_calls\nallowed: bash",
+      "error": "newer than this engine"
+    },
+    {
+      "id": "newer-major",
+      "outcome": "reject",
+      "markdown": "version: 3.0.0\n\n## tool_calls\nallowed: bash",
+      "error": "newer than this engine"
+    },
+    {
+      "id": "http-method-rules-v2-1",
+      "outcome": "accept",
+      "markdown": "version: 2.1.3\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.require_query_matches: ^slug=eq\\.[a-z0-9-]+$\nhttp.method_rules.DELETE.deny: true",
+      "canonicalPolicy": {
+        "version": "2.1.3",
+        "tool_calls": {
+          "allowed": ["http"],
+          "httpMethodRules": {
+            "PATCH": { "requireQueryMatches": "^slug=eq\\.[a-z0-9-]+$" },
+            "DELETE": { "deny": true }
+          }
+        }
+      }
+    },
+    {
+      "id": "http-method-rule-duplicate",
+      "outcome": "reject",
+      "markdown": "version: 2.1.0\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.deny: true\nhttp.method_rules.PATCH.deny: false",
+      "error": "Duplicate tool_calls policy key"
+    },
+    {
+      "id": "http-method-rule-lowercase-method",
+      "outcome": "reject",
+      "markdown": "version: 2.1.0\n\n## tool_calls\nallowed: http\nhttp.method_rules.patch.deny: true",
+      "error": "uppercase supported HTTP method"
+    },
+    {
+      "id": "http-method-rule-empty-query",
+      "outcome": "reject",
+      "markdown": "version: 2.1.0\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.require_query_matches:",
+      "error": "must not be empty"
+    },
+    {
+      "id": "http-method-rule-before-2-1",
+      "outcome": "reject",
+      "markdown": "version: 2.0.9\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.deny: true",
+      "error": "require version 2.1.0"
+    },
+    {
+      "id": "evm-calldata-enrichment-v2-1",
+      "outcome": "accept",
+      "markdown": "version: 2.1.2\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\nrequire_calldata_enrichment: true\ncalldata_unknown_selector: deny",
+      "canonicalPolicy": {
+        "version": "2.1.2",
+        "evm": {
+          "maxTransactionEth": 5,
+          "allowedActions": ["contract.call"],
+          "allowedChains": [1],
+          "requireCalldataEnrichment": true,
+          "calldataUnknownSelector": "deny"
+        }
+      }
+    },
+    {
+      "id": "evm-calldata-empty-selector",
+      "outcome": "reject",
+      "markdown": "version: 2.1.0\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\nrequire_calldata_enrichment: true\ncalldata_unknown_selector:",
+      "error": "must not be empty"
+    },
+    {
+      "id": "evm-calldata-invalid-selector",
+      "outcome": "reject",
+      "markdown": "version: 2.1.0\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\nrequire_calldata_enrichment: true\ncalldata_unknown_selector: observe",
+      "error": "must be allow or deny"
+    },
+    {
+      "id": "evm-calldata-selector-without-enrichment",
+      "outcome": "reject",
+      "markdown": "version: 2.1.0\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\ncalldata_unknown_selector: deny",
+      "error": "requires require_calldata_enrichment"
+    },
+    {
+      "id": "evm-calldata-before-2-1",
+      "outcome": "reject",
+      "markdown": "version: 2.0.3\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\nrequire_calldata_enrichment: true",
+      "error": "require version 2.1.0"
+    }
+  ]
+}

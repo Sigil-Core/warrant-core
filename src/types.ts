@@ -25,3 +25,22 @@ export interface SplitSignatureBlock {
   unsigned: string;
   signature?: string;
 }
+
+export type WarrantEnvelopeErrorCode =
+  | "WARRANT_ENVELOPE_INVALID_UTF8"
+  | "WARRANT_ENVELOPE_DUPLICATE_HEADER"
+  | "WARRANT_ENVELOPE_TRAILING_CONTENT"
+  | "WARRANT_ENVELOPE_DUPLICATE_SIGNATURE"
+  | "WARRANT_ENVELOPE_UNEXPECTED_HEADER"
+  | "WARRANT_ENVELOPE_EMPTY_POLICY";
+
+export interface SignedEnvelope {
+  payload: Uint8Array;
+  signature?: string;
+}
+
+export interface PolicyAdvisory {
+  code: "WARRANT_PROFILE_FIELD_MISSING" | "WARRANT_PROFILE_SHIM_NOT_REQUIRED";
+  path: string;
+  message: string;
+}

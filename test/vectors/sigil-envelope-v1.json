@@ -1,0 +1,114 @@
+{
+  "format": "sigil-envelope-v1/v1",
+  "table": [
+    {
+      "id": "canonical-valid-signed-envelope",
+      "outcome": "accept",
+      "rawUtf8": "version: 2.1.0\n\n## tool_calls\nallowed: bash\n\n## signature\nsigil-sig: abc_DEF-123\n",
+      "payloadUtf8": "version: 2.1.0\n\n## tool_calls\nallowed: bash",
+      "signature": "abc_DEF-123"
+    },
+    {
+      "id": "duplicate-signature-header",
+      "outcome": "reject",
+      "rawUtf8": "version: 2.1.0\n\n## signature\nsigil-sig: abc\n\n## Signature\nsigil-sig: def\n",
+      "code": "WARRANT_ENVELOPE_DUPLICATE_HEADER"
+    },
+    {
+      "id": "unsigned-suffix-after-signature",
+      "outcome": "reject",
+      "rawUtf8": "version: 2.1.0\n\n## signature\nsigil-sig: abc\n\n## tool_calls\nallowed: email.send\n",
+      "code": "WARRANT_ENVELOPE_TRAILING_CONTENT"
+    },
+    {
+      "id": "terminal-heading-after-signature",
+      "outcome": "reject",
+      "rawUtf8": "version: 2.1.0\n\n## signature\nsigil-sig: abc\n\n## note\n",
+      "code": "WARRANT_ENVELOPE_TRAILING_CONTENT"
+    },
+    {
+      "id": "html-comment-after-signature",
+      "outcome": "reject",
+      "rawUtf8": "version: 2.1.0\n\n## signature\nsigil-sig: abc\n\n<!-- unsigned suffix -->\n",
+      "code": "WARRANT_ENVELOPE_TRAILING_CONTENT"
+    },
+    {
+      "id": "duplicate-sigil-sig-line",
+      "outcome": "reject",
+      "rawUtf8": "version: 2.1.0\n\n## signature\nsigil-sig: abc\nsigil-sig: def\n",
+      "code": "WARRANT_ENVELOPE_DUPLICATE_SIGNATURE"
+    },
+    {
+      "id": "crlf-throughout",
+      "outcome": "accept",
+      "rawUtf8": "version: 2.1.0\r\n\r\n## tool_calls\r\nallowed: bash\r\n\r\n## signature\r\nsigil-sig: abc\r\n",
+      "payloadUtf8": "version: 2.1.0\r\n\r\n## tool_calls\r\nallowed: bash",
+      "signature": "abc"
+    },
+    {
+      "id": "trailing-ascii-whitespace-run",
+      "outcome": "accept",
+      "rawUtf8": "version: 2.1.0 \t\r\n \t\r\n## signature\nsigil-sig: abc\n",
+      "payloadUtf8": "version: 2.1.0",
+      "signature": "abc"
+    },
+    {
+      "id": "trailing-unicode-whitespace",
+      "outcome": "accept",
+      "rawUtf8": "version: 2.1.0  　\n\n## signature\nsigil-sig: abc\n",
+      "payloadUtf8": "version: 2.1.0  　",
+      "signature": "abc"
+    },
+    {
+      "id": "leading-bom",
+      "outcome": "accept",
+      "rawUtf8": "﻿version: 2.1.0\n\n## signature\nsigil-sig: abc\n",
+      "payloadUtf8": "﻿version: 2.1.0",
+      "signature": "abc"
+    },
+    {
+      "id": "interior-bom",
+      "outcome": "accept",
+      "rawUtf8": "version: 2.1.0\n﻿\n## signature\nsigil-sig: abc\n",
+      "payloadUtf8": "version: 2.1.0\n﻿",
+      "signature": "abc"
+    },
+    {
+      "id": "malformed-utf8",
+      "outcome": "reject",
+      "rawHex": "76657273696f6e3a20322e312e300ac3280a2323207369676e61747572650a736967696c2d7369673a206162630a",
+      "code": "WARRANT_ENVELOPE_INVALID_UTF8"
+    },
+    {
+      "id": "signature-header-only-empty-policy",
+      "outcome": "reject",
+      "rawUtf8": "## signature\nsigil-sig: abc\n",
+      "code": "WARRANT_ENVELOPE_EMPTY_POLICY"
+    },
+    {
+      "id": "valid-placeholder-no-signature",
+      "outcome": "accept",
+      "rawUtf8": "version: 2.1.0\n\n## signature\n# operator signature will be added later\n",
+      "payloadUtf8": "version: 2.1.0"
+    }
+  ],
+  "families": {
+    "unsignedSource": {
+      "rawUtf8": "version: 2.1.1\n\n## tool_calls\nallowed: bash \t\r\n",
+      "payloadUtf8": "version: 2.1.1\n\n## tool_calls\nallowed: bash"
+    },
+    "emptyPlaceholder": {
+      "rawUtf8": "version: 2.1.1\n\n## signature\n",
+      "payloadUtf8": "version: 2.1.1"
+    },
+    "signedSource": {
+      "sourceUtf8": "version: 2.1.1\n\n## tool_calls\nallowed: bash\n",
+      "signature": "abc_DEF-123"
+    },
+    "resignAfterEdit": {
+      "editedUtf8": "version: 2.1.1\n\n## tool_calls\nallowed: bash, email.send \t\n",
+      "payloadUtf8": "version: 2.1.1\n\n## tool_calls\nallowed: bash, email.send",
+      "signature": "resigned_123"
+    }
+  }
+}

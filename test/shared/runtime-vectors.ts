@@ -4,20 +4,27 @@ import {
   appendSignatureBlock,
   canonicalizePgCommitV1,
   canonicalizePolicyObject,
+  emit,
   hashPgCommitV1,
   hashPolicy,
+  lintPolicyAdvisories,
   parsePolicyMarkdown,
   pgCommitV1Bytes,
   policyCanonicalBytes,
   sha256Hex,
+  signedEnvelopeParse,
   splitSignatureBlock,
+  unsignedSigningPayload,
+  WarrantEnvelopeError,
 } from "../../src/index.js";
 import type { CryptoAdapter, JsonValue } from "../../src/types.js";
 import launchScenarioFixture from "../vectors/launch-scenarios.json";
 import commitmentFixture from "../vectors/pg-commit-v1.json";
 import genericControlParityFixture from "../vectors/generic-control-parity.json";
 import executionLimitsControlParityFixture from "../vectors/execution-limits-control-parity.json";
+import envelopeV1Fixture from "../vectors/sigil-envelope-v1.json";
 import parserHardeningFixture from "../vectors/parser-hardening.json";
+import parserPhase1Fixture from "../vectors/parser-phase1.json";
 import policyFixture from "../vectors/policy-fixtures.json";
 import sigilSignParserParityFixture from "../vectors/sigil-sign-parser-parity.json";
 import signatureFixture from "../vectors/signature-blocks.json";
@@ -32,6 +39,13 @@ function bytesFromBase64url(value: string): Uint8Array {
   const decoded = atob(padded);
   return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
 }
+
+const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
+const decodeUtf8 = (value: Uint8Array): string => new TextDecoder("utf-8", { ignoreBOM: true }).decode(value);
+const bytesFromHex = (value: string): Uint8Array => {
+  if (value.length % 2 !== 0) throw new Error("Hex fixture must contain complete bytes");
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+};
 
 const pgCommitRejectionValues = {
   undefined: () => ({ value: undefined }),
@@ -124,6 +138,61 @@ const defineSharedParserHardeningTests = (): void => {
   }
 };
 
+const defineSharedPhase1ParserTests = (): void => {
+  for (const parserCase of parserPhase1Fixture.cases) {
+    it(`matches the ${parserCase.id} Phase 1 parser vector`, () => {
+      if (parserCase.outcome === "accept") {
+        if (!("canonicalPolicy" in parserCase)) throw new Error(`Missing canonical policy for ${parserCase.id}`);
+        expect(parsePolicyMarkdown(parserCase.markdown)).toEqual(parserCase.canonicalPolicy);
+        return;
+      }
+      if (!("error" in parserCase)) throw new Error(`Missing error for ${parserCase.id}`);
+      expect(() => parsePolicyMarkdown(parserCase.markdown)).toThrow(parserCase.error);
+    });
+  }
+
+  it("reports non-blocking resource-profile advisories", () => {
+    const partial = parsePolicyMarkdown("version: 2.1.1\n\n## repository\nroots: .");
+    expect(lintPolicyAdvisories(partial)).toEqual([
+      {
+        code: "WARRANT_PROFILE_FIELD_MISSING",
+        path: "repository.blockOutsideWrites",
+        message: "## repository omits recommended field blockOutsideWrites",
+      },
+      {
+        code: "WARRANT_PROFILE_FIELD_MISSING",
+        path: "repository.protectGitHistory",
+        message: "## repository omits recommended field protectGitHistory",
+      },
+      {
+        code: "WARRANT_PROFILE_FIELD_MISSING",
+        path: "repository.protectSensitiveFiles",
+        message: "## repository omits recommended field protectSensitiveFiles",
+      },
+      {
+        code: "WARRANT_PROFILE_FIELD_MISSING",
+        path: "repository.gitProviders",
+        message: "## repository omits recommended field gitProviders",
+      },
+      {
+        code: "WARRANT_PROFILE_FIELD_MISSING",
+        path: "repository.requireShim",
+        message: "## repository omits recommended field requireShim",
+      },
+      {
+        code: "WARRANT_PROFILE_SHIM_NOT_REQUIRED",
+        path: "repository.requireShim",
+        message: "## repository does not require a trusted shim",
+      },
+    ]);
+
+    const complete = parsePolicyMarkdown(
+      "version: 2.1.1\n\n## repository\nroots: .\nblock_outside_writes: true\nprotect_git_history: true\nprotect_sensitive_files: true\ngit_providers: github\nrequire_shim: true",
+    );
+    expect(lintPolicyAdvisories(complete)).toEqual([]);
+  });
+};
+
 const defineSharedCommitmentTests = (adapter: CryptoAdapter): void => {
   for (const vector of commitmentFixture.vectors) {
     it(`matches the ${vector.id} commitment vector`, async () => {
@@ -183,15 +252,89 @@ const defineSharedSignatureTests = (adapter: CryptoAdapter): void => {
   }
 };
 
+const envelopeBytes = (vector: { rawUtf8?: string; rawHex?: string }): Uint8Array => {
+  if (vector.rawHex !== undefined) return bytesFromHex(vector.rawHex);
+  if (vector.rawUtf8 !== undefined) return utf8(vector.rawUtf8);
+  throw new Error("Envelope vector must contain rawUtf8 or rawHex");
+};
+
+const defineSharedEnvelopeTests = (): void => {
+  for (const vector of envelopeV1Fixture.table) {
+    it(`matches the ${vector.id} sigil-envelope-v1 vector`, () => {
+      const raw = envelopeBytes(vector);
+      if (vector.outcome === "reject") {
+        try {
+          signedEnvelopeParse(raw);
+          throw new Error(`Expected ${vector.id} to reject`);
+        } catch (error) {
+          expect(error).toBeInstanceOf(WarrantEnvelopeError);
+          expect((error as WarrantEnvelopeError).code).toBe(vector.code);
+        }
+        return;
+      }
+      const parsed = signedEnvelopeParse(raw);
+      expect(decodeUtf8(parsed.payload)).toBe(vector.payloadUtf8);
+      expect(parsed.signature).toBe(vector.signature);
+    });
+  }
+
+  it("uses unsigned source bytes as the signing payload", () => {
+    const vector = envelopeV1Fixture.families.unsignedSource;
+    expect(decodeUtf8(unsignedSigningPayload(utf8(vector.rawUtf8)))).toBe(vector.payloadUtf8);
+  });
+
+  it("reduces an empty placeholder before signing", () => {
+    const vector = envelopeV1Fixture.families.emptyPlaceholder;
+    const placeholder = signedEnvelopeParse(utf8(vector.rawUtf8));
+    expect(placeholder.signature).toBeUndefined();
+    expect(decodeUtf8(placeholder.payload)).toBe(vector.payloadUtf8);
+    const signed = emit(unsignedSigningPayload(placeholder.payload), "placeholder_signature");
+    expect(decodeUtf8(signedEnvelopeParse(signed).payload)).toBe(vector.payloadUtf8);
+  });
+
+  it("obeys the signed envelope round-trip law", () => {
+    const vector = envelopeV1Fixture.families.signedSource;
+    const payload = unsignedSigningPayload(utf8(vector.sourceUtf8));
+    const signed = emit(payload, vector.signature);
+    expect(signedEnvelopeParse(signed)).toEqual({ payload, signature: vector.signature });
+  });
+
+  it("uses edited bytes when re-signing a detached envelope", () => {
+    const vector = envelopeV1Fixture.families.resignAfterEdit;
+    const payload = unsignedSigningPayload(utf8(vector.editedUtf8));
+    const signed = emit(payload, vector.signature);
+    expect(decodeUtf8(signedEnvelopeParse(signed).payload)).toBe(vector.payloadUtf8);
+  });
+};
+
+const defineSharedPhaseOneParserTests = (adapter: CryptoAdapter): void => {
+  for (const vector of parserPhase1Fixture.cases) {
+    it(`matches the ${vector.id} Phase 1 parser vector`, async () => {
+      if (vector.outcome === "reject") {
+        expect(() => parsePolicyMarkdown(vector.markdown)).toThrow(vector.error);
+        return;
+      }
+      const policy = parsePolicyMarkdown(vector.markdown);
+      expect(policy).toEqual(vector.canonicalPolicy);
+      // The hash is part of the cross-runtime parse contract: every accepted
+      // vector must produce the same canonical bytes before consumers cut over.
+      expect(await hashPolicy(adapter, policy)).toBe(await hashPolicy(adapter, vector.canonicalPolicy));
+    });
+  }
+};
+
 const defineSharedPolicyCommitmentAndSignatureVectorTests = (runtime: string, adapter: CryptoAdapter): void => {
   describe(`${runtime} shared policy, commitment, and signature vectors`, () => {
     defineSharedPolicyFixtureTests(adapter);
     defineSharedSignParityTests();
     defineSharedParserHardeningTests();
+    defineSharedPhase1ParserTests();
     defineSharedCommitmentTests(adapter);
     defineSharedLaunchScenarioTests(adapter);
     defineSharedCommitmentRejectionTests();
     defineSharedSignatureTests(adapter);
+    defineSharedEnvelopeTests();
+    defineSharedPhaseOneParserTests(adapter);
   });
 };
 

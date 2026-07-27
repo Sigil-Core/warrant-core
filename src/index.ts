@@ -3,3 +3,6 @@ export * from "./canonical.js";
 export * from "./commitment.js";
 export * from "./policy.js";
 export * from "./signature.js";
+export * from "./capabilities.js";
+export * from "./serializer.js";
+export * from "./validation.js";
