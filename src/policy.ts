@@ -1,4 +1,7 @@
-import type { ParsedPolicy } from "./types.js";
+import type {
+  ParsedPolicy,
+  PolicyAdvisory,
+} from "./types.js";
 import { maskHtmlComments } from "./html-comments.js";
 import { splitSignatureBlock } from "./signature.js";
 
@@ -61,6 +64,7 @@ const RESOURCE_CONFIG: Record<string, { required: string[]; keys: Record<string,
 const ROOT_POLICY_KEYS = new Set([
   "require_approval", "require_shim",
   "max_transaction_eth", "allowed_actions", "allowed_chains", "chain_actions", "consensus_threshold_eth", "consensus_require_hold",
+  "require_calldata_enrichment", "calldata_unknown_selector",
   "allowed", "bash.blocked_commands", "web_fetch.blocked_domains", "file_write.blocked_paths", "email.require_approval", "email.allowed_recipients", "email.blocked_recipients",
   "http.allowed_methods", "http.allowed_hosts", "http.blocked_methods",
   "deny_string", "allowed_servers", "allowed_tools", "blocked_tools",
@@ -71,6 +75,7 @@ const ROOT_POLICY_KEYS = new Set([
 
 const ROOT_POLICY_SYNTAX = [
   /^token\.[A-Za-z0-9_]+\.(?:max_transaction|consensus_threshold|decimals|addresses)\s*:/,
+  /^http\.method_rules\.[A-Za-z]+\.(?:require_query_matches|deny)\s*:/,
   /^cap\.[A-Za-z0-9_-]+\.(?:max_count|max_sum_usd|window|action|group_by|amount_field|window_days|window_hours|timezone)\s*:/,
   /^allow_only(?:\[action=[^\]]*\])?\.[^\s:]+(?:\s+attested)?(?:\s+(?:contains|starts_with|prefix|ends_with|matches|equals))?\s*:/,
   /^deny_if\.\S+\s+(?:contains|starts_with|ends_with|matches|equals|not_equals)\s+.+$/,
@@ -156,12 +161,17 @@ function parseVersion(markdown: string): string {
   if (values.length > 1) throw new Error("Duplicate version fields are not allowed");
   const version = values[0] ?? "0.0.0";
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid policy version "${version}"; expected semver X.Y.Z`);
-  const major = Number(version.split(".")[0]);
-  if ((major === 0 && version !== "0.0.0") || (major === 2 && version !== "2.0.0" && version !== "2.1.0") || major > 2) {
-    throw new Error(`Policy version ${version} is not supported by this engine build`);
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  if (major > 2 || (major === 2 && minor > 1)) {
+    throw new Error(`Policy version ${version} is newer than this engine (supports 0.x, 1.x, 2.0.x, and 2.1.x)`);
   }
   return version;
 }
+
+const policyVersionParts = (version: string): { major: number; minor: number } => {
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  return { major, minor };
+};
 
 function isRootPolicySyntax(line: string): boolean {
   const key = line.match(/^([A-Za-z_][\w.]*)\s*:/)?.[1];
@@ -365,6 +375,13 @@ const EVM_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, value:
   allowed_chains: (result, value) => { result.allowedChains = list(value).map(integer).filter((entry): entry is number => entry !== undefined && entry > 0); },
   consensus_threshold_eth: (result, value) => parseConsensusThresholdEth(result, value),
   consensus_require_hold: (result, value, isV2) => { result.requireHold = boolean(value, "consensus_require_hold", isV2); },
+  require_calldata_enrichment: (result, value) => { result.requireCalldataEnrichment = boolean(value, "require_calldata_enrichment", true); },
+  calldata_unknown_selector: (result, value) => {
+    const normalized = value.replace(/#.*$/, "").trim().toLowerCase();
+    if (!normalized) throw new Error("calldata_unknown_selector must not be empty");
+    if (normalized !== "allow" && normalized !== "deny") throw new Error("calldata_unknown_selector must be allow or deny");
+    result.calldataUnknownSelector = normalized;
+  },
 };
 const parseEvmValue = (result: Record<string, unknown>, key: string, value: string, isV2: boolean): void => {
   const parser = EVM_VALUE_PARSERS[key];
@@ -383,6 +400,9 @@ const isEvmChainActionMapping = (state: EvmParserState, line: string): boolean =
 const ensureEvmRequirements = (result: Record<string, unknown>): void => {
   if (!Array.isArray(result.allowedActions) || result.allowedActions.length === 0) throw new Error("## evm requires at least one allowed_action");
   if (!Array.isArray(result.allowedChains) || result.allowedChains.length === 0) throw new Error("## evm requires at least one positive allowed_chain");
+  if (result.calldataUnknownSelector !== undefined && result.requireCalldataEnrichment !== true) {
+    throw new Error("calldata_unknown_selector requires require_calldata_enrichment: true");
+  }
 };
 interface EvmParseContext {
   result: Record<string, unknown>;
@@ -393,6 +413,9 @@ interface EvmParseContext {
   state: EvmParserState;
 }
 const parseEvmOrdinaryLine = (context: EvmParseContext, line: string, isV2: boolean): void => {
+  if (/^calldata_unknown_selector:\s*$/.test(line)) {
+    throw new Error("calldata_unknown_selector must not be empty");
+  }
   const [key, value] = requireKeyValue(line, "EVM");
   if (parseGenericControl(context.result, key, value, isV2, context.genericControls)) return;
   if (context.ordinaryKeys.has(key)) throw new Error(`Duplicate EVM policy key: ${key}`);
@@ -447,7 +470,27 @@ const TOOL_CALL_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, 
   "http.blocked_methods": parseToolCallHttpMethods,
   "http.allowed_hosts": (result, _key, value, isV2) => parseToolCallHttpHosts(result, value, isV2),
 };
+const HTTP_METHOD_RULE_KEY = /^http\.method_rules\.([A-Za-z]+)\.(require_query_matches|deny)$/;
+const parseHttpMethodRule = (result: Record<string, unknown>, key: string, value: string): boolean => {
+  const match = key.match(HTTP_METHOD_RULE_KEY);
+  if (!match) return false;
+  const method = match[1]!;
+  const field = match[2]!;
+  if (!HTTP_METHODS.has(method)) {
+    throw new Error(`http.method_rules method ${method} must be an uppercase supported HTTP method`);
+  }
+  const rules = (result.httpMethodRules ??= {}) as Record<string, Record<string, unknown>>;
+  const rule = (rules[method] ??= {});
+  if (field === "deny") {
+    rule.deny = boolean(value, key, true);
+    return true;
+  }
+  if (!value) throw new Error(`${key} must not be empty`);
+  rule.requireQueryMatches = value;
+  return true;
+};
 const parseToolCallValue = (result: Record<string, unknown>, key: string, value: string, isV2: boolean): void => {
+  if (parseHttpMethodRule(result, key, value)) return;
   const parser = TOOL_CALL_VALUE_PARSERS[key];
   if (!parser) throw new Error(`Unrecognized tool_calls policy key: ${key}`);
   parser(result, key, value, isV2);
@@ -464,7 +507,14 @@ const validateV2ToolCalls = (result: Record<string, unknown>): void => {
 };
 const parseToolCalls = (lines: string[], isV2: boolean): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
-  for (const [key, value] of unique(lines, "tool_calls")) {
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const match = line.match(/^([\w.]+):\s*(.*)$/);
+    if (!match) throw new Error(`Unrecognized tool_calls policy line: ${line}`);
+    const key = match[1]!;
+    const value = match[2]!;
+    if (seen.has(key)) throw new Error(`Duplicate tool_calls policy key: ${key}`);
+    seen.add(key);
     if (parseGenericControl(result, key, value, isV2)) continue;
     parseToolCallValue(result, key, value, isV2);
   }
@@ -854,18 +904,20 @@ const validateResourceValues = (result: Record<string, unknown>): void => {
   }
 };
 const validateResourceRequirements = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
-  for (const requiredKey of config.required) if (!(requiredKey in result)) throw new Error(`## ${name} requires ${requiredKey}`);
-  if (result.requireShim !== true) throw new Error(`## ${name} requires requireShim: true`);
+  void name;
+  void config;
+  void result;
 };
 const validatesOperationApprovals = (name: string): boolean => name === "git" || name === "database";
 const validateResourceOperationApprovals = (name: string, result: Record<string, unknown>): void => {
   if (!validatesOperationApprovals(name)) return;
-  const allowed = result.allowedOperations as string[];
+  const allowed = result.allowedOperations as string[] | undefined;
   const approval = result.requireApproval as string[] | undefined;
+  if (!allowed) return;
   if (approval?.some((operation) => !allowed.includes(operation))) throw new Error("require_approval must be a subset of allowed_operations");
 };
 const validateDatabaseResources = (name: string, result: Record<string, unknown>): void => {
-  if (name === "database" && (result.allowedResources as string[]).includes("*")) throw new Error("allowed_resources cannot contain bare *");
+  if (name === "database" && (result.allowedResources as string[] | undefined)?.includes("*")) throw new Error("allowed_resources cannot contain bare *");
 };
 const validateResourceResult = (name: string, config: { required: string[] }, result: Record<string, unknown>): void => {
   validateResourceValues(result);
@@ -906,7 +958,7 @@ const isEmptyPolicySection = (value: unknown): boolean => {
   return Object.keys(value).length === 0;
 };
 const retainPolicyEntry = ([key, value]: [string, unknown]): boolean =>
-  key === "version" || !isEmptyPolicySection(value);
+  key === "version" || RESOURCE_SECTIONS.has(key) || !isEmptyPolicySection(value);
 const removeEmpty = (policy: ParsedPolicy): ParsedPolicy =>
   Object.fromEntries(Object.entries(policy).filter(retainPolicyEntry)) as ParsedPolicy;
 
@@ -936,9 +988,18 @@ const parsePolicySection = (section: Section, isV2: boolean): Partial<ParsedPoli
   return resourceSectionResult(section.name, lines);
 };
 const assertPolicyCompatibility = (version: string, isV2: boolean, structural: string, sections: Section[]): void => {
+  const { major, minor } = policyVersionParts(version);
   if (V2_ONLY.test(structural) && !isV2) throw new Error("Policy syntax requires version 2.0.0");
-  if (version !== "2.1.0" && sections.some((section) => RESOURCE_SECTIONS.has(section.name))) {
+  const usesPolicy21 = sections.some((section) => RESOURCE_SECTIONS.has(section.name));
+  const usesF2F3 = sections.some((section) =>
+    (section.name === "tool_calls" && /^\s*http\.method_rules\./m.test(section.body))
+    || (section.name === "evm" && /^\s*(?:require_calldata_enrichment|calldata_unknown_selector):/m.test(section.body))
+  );
+  if ((major !== 2 || minor < 1) && usesPolicy21) {
     throw new Error("Policy 2.1 resource profiles require version 2.1.0");
+  }
+  if ((major !== 2 || minor < 1) && usesF2F3) {
+    throw new Error("http.method_rules and EVM calldata-enrichment keys require version 2.1.0");
   }
 };
 const parsePolicySections = (version: string, isV2: boolean, sections: Section[]): ParsedPolicy => {
@@ -952,8 +1013,33 @@ export const parsePolicyMarkdown = (markdown: string): ParsedPolicy => {
   const structural = maskHtmlComments(unsigned);
   if (/^ {1,3}##\s+\S.*$/m.test(structural)) throw new Error("Indented policy headings are not supported");
   const version = parseVersion(unsigned);
-  const isV2 = version === "2.0.0" || version === "2.1.0";
+  const isV2 = policyVersionParts(version).major === 2;
   const sections = sectionsOf(structural);
   assertPolicyCompatibility(version, isV2, structural, sections);
   return removeEmpty(parsePolicySections(version, isV2, sections));
+};
+
+export const lintPolicyAdvisories = (policy: ParsedPolicy): PolicyAdvisory[] => {
+  const advisories: PolicyAdvisory[] = [];
+  for (const name of RESOURCE_SECTIONS) {
+    const profile = policy[name as keyof ParsedPolicy];
+    if (!profile || typeof profile !== "object") continue;
+    const config = RESOURCE_CONFIG[name]!;
+    for (const field of config.required) {
+      if (field in profile) continue;
+      advisories.push({
+        code: "WARRANT_PROFILE_FIELD_MISSING",
+        path: `${name}.${field}`,
+        message: `## ${name} omits recommended field ${field}`,
+      });
+    }
+    if ((profile as Record<string, unknown>).requireShim !== true) {
+      advisories.push({
+        code: "WARRANT_PROFILE_SHIM_NOT_REQUIRED",
+        path: `${name}.requireShim`,
+        message: `## ${name} does not require a trusted shim`,
+      });
+    }
+  }
+  return advisories;
 };
