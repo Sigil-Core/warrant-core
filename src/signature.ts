@@ -109,6 +109,7 @@ const parseSignatureBlock = (block: string): string | undefined => {
   return signatures[0];
 };
 
+// skipcq: JS-R1005 - Header, payload, and signature checks remain ordered in one strict envelope parser.
 export const signedEnvelopeParse = (raw: Uint8Array): SignedEnvelope => {
   const markdown = decodeUtf8(raw);
   const headers = signatureHeaders(markdown);
