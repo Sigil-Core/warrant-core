@@ -14,6 +14,14 @@ npm install @sigilcore/warrant-core@0.2.1
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
 
+### Published release
+
+`@sigilcore/warrant-core@0.2.1` is immutable. Its npm dist integrity is
+`sha512-1q2H80vewATLciWUoJLV+4v6ApqPrLfsw9kUBcK37eMMfZzdIetf8jQzcGw1wkE+6nbdO/j2Hb+4HeK/yh8SBw==`,
+its SHA-1 shasum is `320456aaba51d7ecdda0575e1c1c3de0ba9c6458`, and its
+published Git head is `cebf31e1af460a1328571d5d8ba2639cc77d9c2d`. npm records
+SLSA provenance for this release.
+
 ## Public API
 
 ```ts
@@ -23,6 +31,7 @@ import {
   canonicalizePolicyObject,
   hashPgCommitV1,
   hashPolicy,
+  lintPolicyAdvisories,
   parsePolicyMarkdown,
   serializePolicyMarkdown,
   signedEnvelopeParse,
@@ -36,6 +45,7 @@ import {
 | Export | Contract |
 | --- | --- |
 | `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts unversioned Policy 0.x, Policy 1.x, 2.0.x, and 2.1.x policy input, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, malformed explicit limits, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, and empty Policy 2.1 resource lists. Policy 2.1 resource profiles may omit fields or `require_shim`; use `lintPolicyAdvisories` for their non-blocking authoring warnings. Version 0.2.0 adds the public Policy 2.1 authoring core and strict signed-envelope handling while retaining the 0.1.1 numeric safety hardening: malformed or nonpositive transaction, consensus, and daily limits reject rather than silently removing enforcement, and token decimals must be a complete integer from 0 through 36. A `matches` declaration uses the same comma-separated list semantics as Sigilcore's Manual Warrant and Warrant Builder parser. |
+| `lintPolicyAdvisories(policy)` | Returns non-blocking recommended-field and trusted-shim warnings for Policy 2.1 resource profiles. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |
@@ -54,6 +64,21 @@ import {
 | `AUTHORING_CAPABILITY_MANIFEST` | Executable per-field author/import/preserve/deploy contract for `manual-form`, `manual-advanced`, and `builder`. |
 
 The root entry point also exports the `ParsedPolicy`, `CryptoAdapter`, `JsonValue`, and `SplitSignatureBlock` types.
+
+## Policy 2.1 authoring contract
+
+Use `validateAndParsePolicyMarkdown` for an authoring or import boundary. It
+returns the complete stable diagnostic list and yields a parsed policy only when
+there are no errors. Treat a result containing errors as a zero-mutation result.
+Use `validatePolicyMarkdown` when a caller needs diagnostics only, then use
+`serializePolicyMarkdown` to emit the supported canonical Markdown body.
+
+For a signed import, pass the original `Uint8Array` to `signedEnvelopeParse`.
+It validates the `sigil-envelope-v1` structure and returns the exact payload
+bytes without normalizing them. Verify those bytes with an explicitly selected
+runtime adapter and trusted operator public key, then use `emit` to append a
+new signature to already validated unsigned payload bytes. The package never
+selects a key, establishes trust, or performs a network deployment.
 
 ## Canonicalization profiles
 
