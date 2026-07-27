@@ -226,11 +226,12 @@ const inspectEnvelope = (
   try {
     masked = maskHtmlComments(markdown);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       markdown,
       unsigned: markdown,
       has_signature_header: false,
-      errors: [mapParserError(error)],
+      errors: [issue("WARRANT_INVALID_POLICY", "document", message)],
     };
   }
   const headers = [...masked.matchAll(SIGNATURE_HEADER)];
