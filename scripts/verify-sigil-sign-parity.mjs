@@ -17,8 +17,12 @@ if (!signCheckout) {
 const parityFixture = JSON.parse(readFileSync(new URL("../test/vectors/sigil-sign-parser-parity.json", import.meta.url), "utf8"));
 const policyFixture = JSON.parse(readFileSync(new URL("../test/vectors/policy-fixtures.json", import.meta.url), "utf8"));
 const actualCommit = execFileSync("git", ["-C", signCheckout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-if (actualCommit !== parityFixture.sigilSignCommit) {
-  throw new Error(`Sigil Sign commit mismatch: expected ${parityFixture.sigilSignCommit}, received ${actualCommit}`);
+const expectedCommit = process.env.SIGIL_SIGN_PARSER_CONTRACT_COMMIT ?? parityFixture.sigilSignCommit;
+if (!/^[0-9a-f]{40}$/.test(expectedCommit)) {
+  throw new Error(`Sigil Sign parser contract commit must be a full SHA-1: received ${expectedCommit}`);
+}
+if (actualCommit !== expectedCommit) {
+  throw new Error(`Sigil Sign commit mismatch: expected ${expectedCommit}, received ${actualCommit}`);
 }
 
 const require = createRequire(import.meta.url);
