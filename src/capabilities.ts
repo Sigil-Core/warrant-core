@@ -496,6 +496,13 @@ export const capabilityValuesForPath = (
   policy: ParsedPolicy,
   path: AuthoringCapabilityPath,
 ): readonly unknown[] => {
+  if (path.startsWith("profile.")) {
+    const profile = path.slice("profile.".length);
+    if (profile === "repository" || profile === "filesystem" || profile === "git" || profile === "database") {
+      const value = policy[profile];
+      return value === undefined ? [] : [value];
+    }
+  }
   if (path.includes("*")) return dynamicValues(policy, path);
   if (path === "policy.version") return [policy.version];
   if (path === "custom.allow_only") {

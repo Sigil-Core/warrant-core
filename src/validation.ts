@@ -222,7 +222,17 @@ const inspectEnvelope = (
   const decoded = decodeInput(raw);
   if (decoded.error !== undefined) return { has_signature_header: false, errors: [decoded.error] };
   const markdown = decoded.markdown ?? "";
-  const masked = maskHtmlComments(markdown);
+  let masked: string;
+  try {
+    masked = maskHtmlComments(markdown);
+  } catch (error) {
+    return {
+      markdown,
+      unsigned: markdown,
+      has_signature_header: false,
+      errors: [mapParserError(error)],
+    };
+  }
   const headers = [...masked.matchAll(SIGNATURE_HEADER)];
   const errors: WarrantyValidationError[] = [];
   if (headers.length === 0) {
@@ -572,14 +582,6 @@ const mapParserError = (error: unknown): WarrantyValidationError => {
   return issue("WARRANT_INVALID_POLICY", path, message);
 };
 
-const AGGREGATE_PATHS = new Set<AuthoringCapabilityPath>([
-  "profile.repository",
-  "profile.filesystem",
-  "profile.git",
-  "profile.database",
-  "tool_calls.http.method_rules",
-]);
-
 // skipcq: JS-R1005 - Surface checks retain distinct availability, preservation, and constraint diagnostics.
 const surfaceErrors = (
   policy: ParsedPolicy,
@@ -610,7 +612,7 @@ const surfaceErrors = (
     );
   }
   for (const path of Object.keys(AUTHORING_CAPABILITY_MANIFEST) as AuthoringCapabilityPath[]) {
-    if (AGGREGATE_PATHS.has(path) || path === "signature.sigil-envelope-v1") continue;
+    if (path === "signature.sigil-envelope-v1") continue;
     const values = capabilityValuesForPath(policy, path);
     if (values.length === 0) continue;
     const entry = AUTHORING_CAPABILITY_MANIFEST[path];
@@ -697,7 +699,12 @@ export const validateAndParsePolicyMarkdown = (
     return { errors: envelope.errors };
   }
   const errors = [...envelope.errors];
-  const structural = maskHtmlComments(envelope.unsigned);
+  let structural: string;
+  try {
+    structural = maskHtmlComments(envelope.unsigned);
+  } catch (error) {
+    return { errors: deduplicate([...errors, mapParserError(error)]) };
+  }
   const version = validateRootVersion(structural, errors);
   const sections = sectionSlices(structural, errors);
   for (const section of sections) scanSection(section, version, errors);

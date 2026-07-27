@@ -109,4 +109,18 @@ describe("Phase 1 authoring core", () => {
       .toMatchObject([{ code: "WARRANT_SURFACE_CANNOT_IMPORT", path: "signature.sigil-envelope-v1" }]);
     expect(validateAndParsePolicyMarkdown(raw, { surface: "manual-advanced" }).errors).toEqual([]);
   });
+
+  it("returns a validation diagnostic for an unterminated HTML comment", () => {
+    const result = validateAndParsePolicyMarkdown("version: 2.1.1\n<!--");
+    expect(result.policy).toBeUndefined();
+    expect(result.errors).toMatchObject([{ code: "WARRANT_INVALID_POLICY", path: "document" }]);
+  });
+
+  it("routes empty resource profiles away from surfaces that cannot preserve them", () => {
+    const result = validateAndParsePolicyMarkdown("version: 2.1.1\n\n## filesystem", {
+      surface: "manual-form",
+    });
+    expect(result.policy).toBeUndefined();
+    expect(result.errors).toMatchObject([{ code: "WARRANT_SURFACE_CANNOT_IMPORT", path: "profile.filesystem" }]);
+  });
 });
