@@ -173,7 +173,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against Sigil Sign production merge `a6673f9c8b50f6b8fca5f4fd15cbc6c42671f656`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this older Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against reviewed Sigil Sign trusted-shim activation commit `48fd37520fe0a3e9f0539b711bcfb60a905390b3`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign
