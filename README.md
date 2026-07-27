@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.1.1
+npm install @sigilcore/warrant-core@0.2.0
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -35,7 +35,7 @@ import {
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts unversioned Policy 0.x, Policy 1.x, 2.0.x, and 2.1.x policy input, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, malformed explicit limits, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, and empty Policy 2.1 resource lists. Policy 2.1 resource profiles may omit fields or `require_shim`; use `lintPolicyAdvisories` for their non-blocking authoring warnings. Version 0.1.1 intentionally hardens configured numeric safety controls across every supported policy version: malformed or nonpositive transaction, consensus, and daily limits reject rather than silently removing enforcement, and token decimals must be a complete integer from 0 through 36. A `matches` declaration uses the same comma-separated list semantics as Sigilcore's Manual Warrant and Warrant Builder parser. |
+| `parsePolicyMarkdown(markdown)` | Parses a supported `warranty.md` body into `ParsedPolicy`. It accepts unversioned Policy 0.x, Policy 1.x, 2.0.x, and 2.1.x policy input, and rejects unknown or duplicate policy blocks, unsupported versions, known policy fields placed at document root, malformed explicit limits, duplicate scalar, generic-control, or dynamic-cap declarations in `soft_limits`, unknown custom-rule syntax in every version, invalid Policy 2.x syntax, false-only no-op controls, and empty Policy 2.1 resource lists. Policy 2.1 resource profiles may omit fields or `require_shim`; use `lintPolicyAdvisories` for their non-blocking authoring warnings. Version 0.2.0 adds the public Policy 2.1 authoring core and strict signed-envelope handling while retaining the 0.1.1 numeric safety hardening: malformed or nonpositive transaction, consensus, and daily limits reject rather than silently removing enforcement, and token decimals must be a complete integer from 0 through 36. A `matches` declaration uses the same comma-separated list semantics as Sigilcore's Manual Warrant and Warrant Builder parser. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
 | `hashPolicy(adapter, policy)` | SHA-256 lowercase hexadecimal digest of `policyCanonicalBytes(policy)`. |
@@ -171,4 +171,4 @@ The initial npm package bootstrap is complete. The following steps are a non-rep
 5. The npm package settings were configured with the GitHub Actions trusted publisher for organization `Sigil-Core`, repository `warrant-core`, workflow filename `publish.yml`, and the `npm publish` permission.
 6. The reviewed stable `0.1.0` commit set `package.json` and `package-lock.json` to `0.1.0` and used the exact `v0.1.0` tag. The workflow published that immutable first stable version through npm OIDC.
 
-Do not repeat the bootstrap or use owner-authenticated publication for a later release. For every later stable release, including `0.1.1`, update the package and lockfile to the exact new version and push the matching `v` tag so the configured trusted publisher runs `.github/workflows/publish.yml`. The workflow intentionally contains no npm write token. See npm's [trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/) for the current registry requirements.
+Do not repeat the bootstrap or use owner-authenticated publication for a later release. For every later stable release, including `0.2.0`, update the package and lockfile to the exact new version and push the matching `v` tag so the configured trusted publisher runs `.github/workflows/publish.yml`. The workflow intentionally contains no npm write token. See npm's [trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/) for the current registry requirements.
