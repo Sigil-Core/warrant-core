@@ -8,3 +8,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Internal agent operating rules. Canonical: ~/Sigil/agents-global-canonical.md
+# Never publish: contains internal infra topology and secret-store paths.
+agents-global.md
