@@ -298,11 +298,14 @@ const assertStrictCc1Acceptance = async (
   await expect(verify(publicKey, signature, framePreimage(framed, vector.verification.rejectedPreimage))).resolves.toBe(false);
 };
 
-const assertStrictCc1Vector = async (
+const assertStrictCc1Vector = (
   vector: typeof envelopeV1Fixture.strictCc1.table[number],
   adapter: CryptoAdapter,
 ): Promise<void> => {
-  if (vector.outcome === "reject") return assertStrictCc1Rejection(vector);
+  if (vector.outcome === "reject") {
+    assertStrictCc1Rejection(vector);
+    return Promise.resolve();
+  }
   return assertStrictCc1Acceptance(vector, adapter);
 };
 
