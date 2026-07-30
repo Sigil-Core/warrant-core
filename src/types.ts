@@ -55,7 +55,14 @@ export interface SignedEnvelope {
 export interface WarrantMarkdownFrame {
   raw: Uint8Array;
   markdown: string;
+  /** CC-1 signing and verification preimage: policy bytes with one final LF. */
   unsigned: Uint8Array;
+  /**
+   * Legacy envelope verification preimage. This preserves the bytes that the
+   * published `emit()` helper signed before writing its two-LF separator.
+   * New CC-1 signing and verification must use `unsigned` instead.
+   */
+  legacyUnsigned: Uint8Array;
   signature: string;
 }
 

@@ -18,6 +18,7 @@ const strictSignatureHeader = "## signature\n";
 const strictSignature = /^[A-Za-z0-9_-]{86}$/;
 const strictWarrantMaximumBytes = 256 * 1024;
 const strictSignaturePrefix = "sigil-sig: ";
+const base64urlAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 export class WarrantEnvelopeError extends Error {
   readonly code: WarrantEnvelopeErrorCode;
@@ -155,6 +156,85 @@ export const unsignedSigningPayload = (raw: Uint8Array): Uint8Array => {
   return assertPayload(stripTrailingBytes(raw));
 };
 
+const throwStrictEnvelopeError = (code: WarrantEnvelopeErrorCode, message: string): never => {
+  throw new WarrantEnvelopeError(code, message);
+};
+
+const assertStrictByteLimit = (raw: Uint8Array, options: StrictWarrantFramingOptions): void => {
+  const maximumBytes = options.maxBytes ?? strictWarrantMaximumBytes;
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0 || maximumBytes > strictWarrantMaximumBytes || raw.length > maximumBytes) {
+    throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_SIZE", "Strict Warrant framing exceeds its configured byte limit");
+  }
+  if (raw.length === 0) {
+    throwStrictEnvelopeError("WARRANT_ENVELOPE_EMPTY_POLICY", "Warrant framing contains an empty policy payload");
+  }
+};
+
+const assertStrictRawBytes = (raw: Uint8Array): void => {
+  if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) {
+    throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_BOM", "Strict Warrant framing forbids a UTF-8 BOM");
+  }
+  if (raw.includes(0x0d)) {
+    throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_CR", "Strict Warrant framing forbids CR bytes");
+  }
+  if (raw.includes(0x00)) {
+    throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_NUL", "Strict Warrant framing forbids NUL bytes");
+  }
+};
+
+const strictHeaderOffsets = (raw: Uint8Array, markdown: string): { headerIndex: number; headerByteIndex: number } => {
+  const headerIndex = markdown.indexOf(strictSignatureHeader);
+  if (headerIndex <= 0 || headerIndex !== markdown.lastIndexOf(strictSignatureHeader)) {
+    return throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_HEADER", "Strict Warrant framing requires one final literal signature header");
+  }
+  const headerByteIndex = byteOffset(markdown, headerIndex);
+  if (raw[headerByteIndex - 1] !== 0x0a) {
+    return throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_HEADER", "Strict Warrant framing requires the signature header at the start of a line");
+  }
+  return { headerIndex, headerByteIndex };
+};
+
+const isCanonical64ByteBase64url = (signature: string): boolean => {
+  const finalCharacter = signature.at(-1);
+  return strictSignature.test(signature)
+    && finalCharacter !== undefined
+    // An 86-character unpadded Base64url value encodes 64 bytes only when
+    // the low four unused bits in its final sextet are zero.
+    && (base64urlAlphabet.indexOf(finalCharacter) & 0x0f) === 0;
+};
+
+const strictSignatureFromBlock = (markdown: string, headerIndex: number): string => {
+  const signatureBlock = markdown.slice(headerIndex + strictSignatureHeader.length);
+  const finalNewline = signatureBlock.indexOf("\n");
+  const signatureLine = finalNewline === -1 ? signatureBlock : signatureBlock.slice(0, finalNewline);
+  const trailing = finalNewline === -1 ? "" : signatureBlock.slice(finalNewline);
+  if (!signatureLine.startsWith(strictSignaturePrefix) || !/^[ \t\n]*$/.test(trailing)) {
+    return throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_SIGNATURE", "Strict Warrant framing requires one bounded base64url signature");
+  }
+  const signature = signatureLine.slice(strictSignaturePrefix.length);
+  if (!isCanonical64ByteBase64url(signature)) {
+    return throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_SIGNATURE", "Strict Warrant framing requires a canonical 64-byte Ed25519 signature");
+  }
+  return signature;
+};
+
+const strictPreimages = (raw: Uint8Array, headerByteIndex: number): Pick<WarrantMarkdownFrame, "unsigned" | "legacyUnsigned"> => {
+  let payloadEnd = headerByteIndex;
+  while (payloadEnd > 0) {
+    const byte = raw[payloadEnd - 1];
+    if (byte !== 0x20 && byte !== 0x09 && byte !== 0x0a) break;
+    payloadEnd -= 1;
+  }
+  if (payloadEnd === 0) {
+    return throwStrictEnvelopeError("WARRANT_ENVELOPE_EMPTY_POLICY", "Warrant framing contains an empty policy payload");
+  }
+  const legacyUnsigned = raw.slice(0, payloadEnd);
+  const unsigned = new Uint8Array(payloadEnd + 1);
+  unsigned.set(legacyUnsigned);
+  unsigned[payloadEnd] = 0x0a;
+  return { unsigned, legacyUnsigned };
+};
+
 /**
  * Frame an exact CC-1 Warrant source. This is intentionally stricter than the
  * legacy helpers and preserves every accepted raw/preimage byte unchanged.
@@ -165,66 +245,17 @@ export const frameWarrantMarkdownBytes = (
   raw: Uint8Array,
   options: StrictWarrantFramingOptions = {},
 ): WarrantMarkdownFrame => {
-  const maximumBytes = options.maxBytes ?? strictWarrantMaximumBytes;
-  if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0 || maximumBytes > strictWarrantMaximumBytes || raw.length > maximumBytes) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_SIZE", "Strict Warrant framing exceeds its configured byte limit");
-  }
-  if (raw.length === 0) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_EMPTY_POLICY", "Warrant framing contains an empty policy payload");
-  }
-  if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_BOM", "Strict Warrant framing forbids a UTF-8 BOM");
-  }
-  if (raw.includes(0x0d)) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_CR", "Strict Warrant framing forbids CR bytes");
-  }
-  if (raw.includes(0x00)) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_NUL", "Strict Warrant framing forbids NUL bytes");
-  }
+  assertStrictByteLimit(raw, options);
+  assertStrictRawBytes(raw);
   const markdown = decodeUtf8(raw);
-  const headerIndex = markdown.indexOf(strictSignatureHeader);
-  if (headerIndex <= 0 || headerIndex !== markdown.lastIndexOf(strictSignatureHeader)) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_HEADER", "Strict Warrant framing requires one final literal signature header");
-  }
-  const headerByteIndex = byteOffset(markdown, headerIndex);
-  if (raw[headerByteIndex - 1] !== 0x0a) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_HEADER", "Strict Warrant framing requires the signature header at the start of a line");
-  }
-  const signatureBlock = markdown.slice(headerIndex + strictSignatureHeader.length);
-  const finalNewline = signatureBlock.indexOf("\n");
-  const signatureLine = finalNewline === -1 ? signatureBlock : signatureBlock.slice(0, finalNewline);
-  const trailing = finalNewline === -1 ? "" : signatureBlock.slice(finalNewline);
-  if (!signatureLine.startsWith(strictSignaturePrefix) || !/^[ \t\n]*$/.test(trailing)) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_SIGNATURE", "Strict Warrant framing requires one bounded base64url signature");
-  }
-  const signature = signatureLine.slice(strictSignaturePrefix.length);
-  if (!strictSignature.test(signature)) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_SIGNATURE", "Strict Warrant framing requires a 64-byte Ed25519 base64url signature");
-  }
-  try {
-    const padded = signature.padEnd(Math.ceil(signature.length / 4) * 4, "=");
-    const decoded = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
-    const canonical = btoa(decoded).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-    if (decoded.length !== 64 || canonical !== signature) throw new Error("invalid signature");
-  } catch {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_STRICT_SIGNATURE", "Strict Warrant framing requires a canonical 64-byte Ed25519 signature");
-  }
-  let payloadEnd = headerByteIndex;
-  while (payloadEnd > 0) {
-    const byte = raw[payloadEnd - 1];
-    if (byte !== 0x20 && byte !== 0x09 && byte !== 0x0a) break;
-    payloadEnd -= 1;
-  }
-  if (payloadEnd === 0) {
-    throw new WarrantEnvelopeError("WARRANT_ENVELOPE_EMPTY_POLICY", "Warrant framing contains an empty policy payload");
-  }
-  const unsigned = new Uint8Array(payloadEnd + 1);
-  unsigned.set(raw.slice(0, payloadEnd));
-  unsigned[payloadEnd] = 0x0a;
+  const { headerIndex, headerByteIndex } = strictHeaderOffsets(raw, markdown);
+  const signature = strictSignatureFromBlock(markdown, headerIndex);
+  const { unsigned, legacyUnsigned } = strictPreimages(raw, headerByteIndex);
   return {
     raw: raw.slice(),
     markdown,
     unsigned,
+    legacyUnsigned,
     signature,
   };
 };

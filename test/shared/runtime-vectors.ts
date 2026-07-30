@@ -43,6 +43,7 @@ function bytesFromBase64url(value: string): Uint8Array {
 
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
 const strictSignature = "A".repeat(86);
+const strictVerificationSignature = "v26aX93x6jrQjDoNe0j1PLGKZiTVs2u1cRh4KHygANQc0tXvrZR-6xA55gt8BMeDzwxXuCnO0CRJyaRTSJNWCg";
 const decodeUtf8 = (value: Uint8Array): string => new TextDecoder("utf-8", { ignoreBOM: true }).decode(value);
 const signedWarrant = (unsigned: string): Uint8Array =>
   utf8(`${unsigned.trimEnd()}\n\n## signature\nsigil-sig: ${strictSignature}\n`);
@@ -262,7 +263,7 @@ const envelopeBytes = (vector: { rawUtf8?: string; rawHex?: string }): Uint8Arra
   throw new Error("Envelope vector must contain rawUtf8 or rawHex");
 };
 
-const defineSharedEnvelopeTests = (): void => {
+const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
   for (const vector of envelopeV1Fixture.table) {
     it(`matches the ${vector.id} sigil-envelope-v1 vector`, () => {
       const raw = envelopeBytes(vector);
@@ -326,6 +327,30 @@ const defineSharedEnvelopeTests = (): void => {
     expect(framed.raw).toEqual(signed);
     expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n\n## tool_calls\nallowed: web_fetch\n");
     expect(framed.signature).toBe(strictSignature);
+  });
+
+  it("preserves the legacy emitter preimage while separating it from the CC-1 preimage", async () => {
+    const legacyVector = signatureFixture.vectors.find((vector) => vector.id === "signature-block-test-only-policy");
+    if (!legacyVector?.signedMarkdown || !legacyVector.signatureBase64url || !legacyVector.key) {
+      throw new Error("Missing legacy Warrant signature verification vector");
+    }
+    const publicKey = bytesFromBase64url(signatureFixture.keys[legacyVector.key as "rfc8032Test1"].rawPublicKeyBase64url);
+    const signature = bytesFromBase64url(legacyVector.signatureBase64url);
+    const framed = frameWarrantMarkdownBytes(utf8(legacyVector.signedMarkdown));
+    const verify = requiredEd25519Verifier(adapter);
+    await expect(verify(publicKey, signature, framed.legacyUnsigned)).resolves.toBe(true);
+    await expect(verify(publicKey, signature, framed.unsigned)).resolves.toBe(false);
+  });
+
+  it("uses the CC-1 one-LF preimage for a strict Ed25519 signature", async () => {
+    const strictUnsigned = "version: 2.1.0\n## tool_calls\nallowed: web_fetch\n";
+    const raw = utf8(`${strictUnsigned}## signature\nsigil-sig: ${strictVerificationSignature}\n`);
+    const framed = frameWarrantMarkdownBytes(raw);
+    const publicKey = bytesFromBase64url(signatureFixture.keys.rfc8032Test1.rawPublicKeyBase64url);
+    const signature = bytesFromBase64url(strictVerificationSignature);
+    expect(framed.unsigned).toEqual(utf8(strictUnsigned));
+    await expect(requiredEd25519Verifier(adapter)(publicKey, signature, framed.unsigned)).resolves.toBe(true);
+    await expect(requiredEd25519Verifier(adapter)(publicKey, signature, framed.legacyUnsigned)).resolves.toBe(false);
   });
 
   it("frames a current Warrant Builder signed output without changing its raw bytes", () => {
@@ -393,6 +418,7 @@ const defineSharedEnvelopeTests = (): void => {
       [utf8(`version: 2.1.0 ## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
       [utf8(`version: 2.1.0\n## Signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
       [utf8("version: 2.1.0\n## signature\nsigil-sig: short"), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
+      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${"A".repeat(85)}B`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
       [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature.slice(0, -1)}!`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
       [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
       [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}\n## signature`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
@@ -445,7 +471,7 @@ const defineSharedPolicyCommitmentAndSignatureVectorTests = (runtime: string, ad
     defineSharedLaunchScenarioTests(adapter);
     defineSharedCommitmentRejectionTests();
     defineSharedSignatureTests(adapter);
-    defineSharedEnvelopeTests();
+    defineSharedEnvelopeTests(adapter);
     defineSharedPhaseOneParserTests(adapter);
   });
 };
