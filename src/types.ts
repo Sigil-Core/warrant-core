@@ -32,11 +32,43 @@ export type WarrantEnvelopeErrorCode =
   | "WARRANT_ENVELOPE_TRAILING_CONTENT"
   | "WARRANT_ENVELOPE_DUPLICATE_SIGNATURE"
   | "WARRANT_ENVELOPE_UNEXPECTED_HEADER"
-  | "WARRANT_ENVELOPE_EMPTY_POLICY";
+  | "WARRANT_ENVELOPE_EMPTY_POLICY"
+  | "WARRANT_ENVELOPE_STRICT_BOM"
+  | "WARRANT_ENVELOPE_STRICT_SIZE"
+  | "WARRANT_ENVELOPE_STRICT_CR"
+  | "WARRANT_ENVELOPE_STRICT_NUL"
+  | "WARRANT_ENVELOPE_STRICT_HEADER"
+  | "WARRANT_ENVELOPE_STRICT_SIGNATURE";
 
 export interface SignedEnvelope {
   payload: Uint8Array;
   signature?: string;
+}
+
+/**
+ * Strict raw-byte Warrant framing for CC-1 callers. This deliberately differs
+ * from the legacy helpers: it forbids a BOM, CR, and NUL; requires one literal
+ * LF before the final signature header. It preserves the raw input and derives
+ * the signable preimage by collapsing only the permitted trailing whitespace
+ * before that header to exactly one LF.
+ */
+export interface WarrantMarkdownFrame {
+  raw: Uint8Array;
+  markdown: string;
+  /** CC-1 signing and verification preimage: policy bytes with one final LF. */
+  unsigned: Uint8Array;
+  /**
+   * Legacy envelope verification preimage. This preserves the bytes that the
+   * published `emit()` helper signed before writing its two-LF separator.
+   * New CC-1 signing and verification must use `unsigned` instead.
+   */
+  legacyUnsigned: Uint8Array;
+  signature: string;
+}
+
+/** Optional lower caller limit for strict framing. The hard ceiling is 256 KiB. */
+export interface StrictWarrantFramingOptions {
+  maxBytes?: number;
 }
 
 export interface PolicyAdvisory {

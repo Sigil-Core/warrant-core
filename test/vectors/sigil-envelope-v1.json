@@ -92,6 +92,150 @@
       "payloadUtf8": "version: 2.1.0"
     }
   ],
+  "strictCc1": {
+    "format": "warrant-cc1-framing/v1",
+    "table": [
+      {
+        "id": "cc1-canonical-ed25519",
+        "outcome": "accept",
+        "rawUtf8": "version: 2.1.0\n## tool_calls\nallowed: web_fetch\n## signature\nsigil-sig: v26aX93x6jrQjDoNe0j1PLGKZiTVs2u1cRh4KHygANQc0tXvrZR-6xA55gt8BMeDzwxXuCnO0CRJyaRTSJNWCg\n",
+        "unsignedUtf8": "version: 2.1.0\n## tool_calls\nallowed: web_fetch\n",
+        "legacyUnsignedUtf8": "version: 2.1.0\n## tool_calls\nallowed: web_fetch",
+        "signature": "v26aX93x6jrQjDoNe0j1PLGKZiTVs2u1cRh4KHygANQc0tXvrZR-6xA55gt8BMeDzwxXuCnO0CRJyaRTSJNWCg",
+        "verification": {
+          "publicKeyBase64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "preimage": "unsigned",
+          "rejectedPreimage": "legacyUnsigned"
+        }
+      },
+      {
+        "id": "legacy-emitter-ed25519",
+        "outcome": "accept",
+        "rawUtf8": "version: 2.0.0\n\n## custom\ndeny_string: TEST_ONLY\n\n## signature\nsigil-sig: jQ41oYlVd05FocbgWGNhuMioDVietDuSaukoh122AR_lJzESa7Qmbi1qGmK3i_hcJ3DyfZv31o5jwY1btSW0Bg\n",
+        "unsignedUtf8": "version: 2.0.0\n\n## custom\ndeny_string: TEST_ONLY\n",
+        "legacyUnsignedUtf8": "version: 2.0.0\n\n## custom\ndeny_string: TEST_ONLY",
+        "signature": "jQ41oYlVd05FocbgWGNhuMioDVietDuSaukoh122AR_lJzESa7Qmbi1qGmK3i_hcJ3DyfZv31o5jwY1btSW0Bg",
+        "verification": {
+          "publicKeyBase64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "preimage": "legacyUnsigned",
+          "rejectedPreimage": "unsigned"
+        }
+      },
+      {
+        "id": "cc1-final-trailing-whitespace",
+        "outcome": "accept",
+        "rawUtf8": "version: 2.1.0\n \t\n\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n \t\n",
+        "unsignedUtf8": "version: 2.1.0\n",
+        "legacyUnsignedUtf8": "version: 2.1.0",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      {
+        "id": "cc1-final-missing-newline",
+        "outcome": "accept",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "unsignedUtf8": "version: 2.1.0\n",
+        "legacyUnsignedUtf8": "version: 2.1.0",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      {
+        "id": "cc1-empty-raw",
+        "outcome": "reject",
+        "rawUtf8": "",
+        "code": "WARRANT_ENVELOPE_EMPTY_POLICY"
+      },
+      {
+        "id": "cc1-empty-policy",
+        "outcome": "reject",
+        "rawUtf8": " \t\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_EMPTY_POLICY"
+      },
+      {
+        "id": "cc1-leading-bom",
+        "outcome": "reject",
+        "rawUtf8": "﻿version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_STRICT_BOM"
+      },
+      {
+        "id": "cc1-cr",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\r\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_STRICT_CR"
+      },
+      {
+        "id": "cc1-nul",
+        "outcome": "reject",
+        "rawHex": "76657273696f6e3a20322e312e300a2323207369676e61747572650a736967696c2d7369673a204141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414100",
+        "code": "WARRANT_ENVELOPE_STRICT_NUL"
+      },
+      {
+        "id": "cc1-missing-header",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n",
+        "code": "WARRANT_ENVELOPE_STRICT_HEADER"
+      },
+      {
+        "id": "cc1-nonliteral-header",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## Signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_STRICT_HEADER"
+      },
+      {
+        "id": "cc1-header-not-at-line-start",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0 ## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_STRICT_HEADER"
+      },
+      {
+        "id": "cc1-duplicate-literal-header",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_STRICT_HEADER"
+      },
+      {
+        "id": "cc1-short-signature",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: short",
+        "code": "WARRANT_ENVELOPE_STRICT_SIGNATURE"
+      },
+      {
+        "id": "cc1-non-base64url-signature",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!",
+        "code": "WARRANT_ENVELOPE_STRICT_SIGNATURE"
+      },
+      {
+        "id": "cc1-noncanonical-final-sextet",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB",
+        "code": "WARRANT_ENVELOPE_STRICT_SIGNATURE"
+      },
+      {
+        "id": "cc1-duplicate-signature-line",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "code": "WARRANT_ENVELOPE_STRICT_SIGNATURE"
+      },
+      {
+        "id": "cc1-trailing-header",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n## signature",
+        "code": "WARRANT_ENVELOPE_STRICT_SIGNATURE"
+      },
+      {
+        "id": "cc1-hard-size-limit",
+        "outcome": "reject",
+        "rawByteLength": 262145,
+        "code": "WARRANT_ENVELOPE_STRICT_SIZE"
+      },
+      {
+        "id": "cc1-configured-lower-size-limit",
+        "outcome": "reject",
+        "rawUtf8": "version: 2.1.0\n## signature\nsigil-sig: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "options": { "maxBytes": 8 },
+        "code": "WARRANT_ENVELOPE_STRICT_SIZE"
+      }
+    ]
+  },
   "families": {
     "unsignedSource": {
       "rawUtf8": "version: 2.1.1\n\n## tool_calls\nallowed: bash \t\r\n",

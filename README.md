@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.2.2
+npm install @sigilcore/warrant-core@0.2.3
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -30,6 +30,11 @@ published Git head is `479673ea735d0059989c68c6b25cb1b206e64b45`. Tag `v0.2.2`
 and trusted-publisher workflow run `30278830707` bind the release evidence. npm
 records SLSA provenance for this release.
 
+Version `0.2.3` is the next immutable release candidate. It re-pins the
+byte-identical parser corpus to Sigil Sign `915ff62003e59b24189e6c09f6dda2d8685bfcb9`.
+Do not claim npm integrity or provenance for `0.2.3` until the trusted-publisher
+workflow has completed.
+
 ## Public API
 
 ```ts
@@ -37,6 +42,7 @@ import {
   appendSignatureBlock,
   canonicalizePgCommitV1,
   canonicalizePolicyObject,
+  frameWarrantMarkdownBytes,
   hashPgCommitV1,
   hashPolicy,
   lintPolicyAdvisories,
@@ -66,6 +72,7 @@ import {
 | `signedEnvelopeParse(raw)` | Validates a signed `sigil-envelope-v1` byte envelope and returns its exact payload bytes plus an optional signature for an empty placeholder block. |
 | `unsignedSigningPayload(raw)` | Validates unsigned UTF-8 source and returns its signing payload after stripping ASCII space, tab, CR, and LF bytes only. |
 | `emit(payload, signature)` | Emits the canonical signed envelope for a validated unsigned payload. |
+| `frameWarrantMarkdownBytes(raw, options?)` | Frames a strict CC-1 signed Warrant. It rejects BOM, CR, NUL, non-literal or repeated final signature headers, invalid Base64url, and payloads over 256 KiB. `unsigned` is the CC-1 one-LF preimage. `legacyUnsigned` exists only to verify an envelope previously emitted by `emit()`, whose historical signing preimage excludes that LF. |
 | `validatePolicyMarkdown(markdown, options?)` | Returns all independent authoring diagnostics as stable `{ code, path, message, surface_hint }` values. |
 | `validateAndParsePolicyMarkdown(markdown, options?)` | Returns the complete diagnostic list and, only on success, the parsed policy. Callers apply authoring state only when `errors` is empty. |
 | `serializePolicyMarkdown(policy)` | Emits the canonical Phase 1 Markdown body for a parsed policy. Page cutover remains a later phase. |
@@ -150,11 +157,16 @@ The Node adapter accepts Ed25519 PKCS#8 private-key bytes for signing. Its verif
 
 ## Signature boundary
 
-New signing and verification integrations use `signedEnvelopeParse`,
-`unsignedSigningPayload`, and `emit`. They validate UTF-8, preserve BOM and
-Unicode whitespace bytes, and strip only trailing ASCII space, tab, CR, and LF.
-The older string helpers remain compatibility wrappers and are not an exact-byte
-signing API.
+New CC-1 signing and verification integrations use
+`frameWarrantMarkdownBytes`. Its `unsigned` property is the only CC-1 signing
+preimage and has exactly one final LF. `legacyUnsigned` exists only for
+verification of a previously emitted legacy envelope, whose `emit()` signing
+preimage omits that LF. Do not sign a new CC-1 Warrant with `legacyUnsigned`.
+
+Legacy `signedEnvelopeParse`, `unsignedSigningPayload`, and `emit` validate
+UTF-8, preserve BOM and Unicode whitespace bytes, and strip only trailing ASCII
+space, tab, CR, and LF. The older string helpers remain compatibility wrappers
+and are not an exact-byte signing API.
 
 `splitSignatureBlock` and `appendSignatureBlock` operate on Warrant text structure. They do not hash, sign, verify, base64url-decode, validate policy semantics, or select a trusted public key.
 
@@ -181,7 +193,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against reviewed Sigil Sign trusted-shim activation commit `48fd37520fe0a3e9f0539b711bcfb60a905390b3`. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against reviewed Sigil Sign commit `915ff62003e59b24189e6c09f6dda2d8685bfcb9`. The re-pin was checked with no `src/lex` diff and the frozen six canonical policies plus 94 edge cases. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign
