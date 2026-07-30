@@ -4,6 +4,7 @@ import {
   appendSignatureBlock,
   canonicalizePgCommitV1,
   canonicalizePolicyObject,
+  frameWarrantMarkdownBytes,
   emit,
   hashPgCommitV1,
   hashPolicy,
@@ -41,7 +42,10 @@ function bytesFromBase64url(value: string): Uint8Array {
 }
 
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
+const strictSignature = "A".repeat(86);
 const decodeUtf8 = (value: Uint8Array): string => new TextDecoder("utf-8", { ignoreBOM: true }).decode(value);
+const signedWarrant = (unsigned: string): Uint8Array =>
+  utf8(`${unsigned.trimEnd()}\n\n## signature\nsigil-sig: ${strictSignature}\n`);
 const bytesFromHex = (value: string): Uint8Array => {
   if (value.length % 2 !== 0) throw new Error("Hex fixture must contain complete bytes");
   return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
@@ -304,6 +308,114 @@ const defineSharedEnvelopeTests = (): void => {
     const payload = unsignedSigningPayload(utf8(vector.editedUtf8));
     const signed = emit(payload, vector.signature);
     expect(decodeUtf8(signedEnvelopeParse(signed).payload)).toBe(vector.payloadUtf8);
+  });
+
+  it("preserves raw UTF-8 framing and signature bytes", () => {
+    const signed = utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`);
+    const framed = frameWarrantMarkdownBytes(signed);
+    expect(framed.raw).toEqual(signed);
+    expect(framed.markdown).toBe(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`);
+    expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n");
+    expect(framed.signature).toBe(strictSignature);
+  });
+
+  it("accepts the existing emitter and collapses its blank-line separator to one signed LF", () => {
+    const payload = utf8("version: 2.1.0\n\n## tool_calls\nallowed: web_fetch\n");
+    const signed = emit(payload, strictSignature);
+    const framed = frameWarrantMarkdownBytes(signed);
+    expect(framed.raw).toEqual(signed);
+    expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n\n## tool_calls\nallowed: web_fetch\n");
+    expect(framed.signature).toBe(strictSignature);
+  });
+
+  it("frames a current Warrant Builder signed output without changing its raw bytes", () => {
+    // Captured from the current Warrant Builder serializer shape (sigilcore
+    // origin/main e9aa7321f50952b9b8b66d57dc1895635d34996f). Builder signs
+    // canonical policy text then writes the final block with two LF bytes.
+    const builderUnsigned = [
+      "version: 2.1.0",
+      "",
+      "## repository",
+      "roots: .",
+      "block_outside_writes: true",
+      "protect_git_history: true",
+      "protect_sensitive_files: true",
+      "git_providers: generic, github",
+      "require_shim: true",
+      "",
+      "## tool_calls",
+      "allowed: web_fetch",
+    ].join("\n");
+    const raw = signedWarrant(builderUnsigned);
+    const framed = frameWarrantMarkdownBytes(raw);
+    expect(framed.raw).toEqual(raw);
+    expect(decodeUtf8(framed.unsigned)).toBe(`${builderUnsigned}\n`);
+    expect(parsePolicyMarkdown(decodeUtf8(framed.unsigned))).toEqual(parsePolicyMarkdown(builderUnsigned));
+  });
+
+  it("frames three current Manual Warrant templates without changing their raw bytes", () => {
+    // These policy vectors are byte-pinned Manual template bodies. The three
+    // distinct profiles exercise the Manual Warrant's repository, tool-call,
+    // and EVM authoring paths after its normal final-block signing step.
+    const expectedSlugs = ["claude-code-agent", "customer-support-agent", "stablecoin-treasury-agent"];
+    const fixtures = expectedSlugs.map((slug) => {
+      const fixture = policyFixture.fixtures.find((candidate) => candidate.slug === slug);
+      if (!fixture) throw new Error(`Missing Manual Warrant fixture ${slug}`);
+      return fixture;
+    });
+    expect(fixtures).toHaveLength(3);
+    for (const fixture of fixtures) {
+      const unsigned = fixture.templateBody.replace(/\n## signature\n[\s\S]*$/, "").trimEnd();
+      const raw = signedWarrant(unsigned);
+      const framed = frameWarrantMarkdownBytes(raw);
+      expect(framed.raw).toEqual(raw);
+      expect(decodeUtf8(framed.unsigned)).toBe(`${unsigned}\n`);
+      expect(parsePolicyMarkdown(decodeUtf8(framed.unsigned))).toEqual(parsePolicyMarkdown(unsigned));
+    }
+  });
+
+  it("accepts a missing or present final newline plus trailing whitespace only", () => {
+    for (const trailing of ["", "\n", "\n \t\n"]) {
+      const framed = frameWarrantMarkdownBytes(utf8(`version: 2.1.0\n \t\n\n## signature\nsigil-sig: ${strictSignature}${trailing}`));
+      expect(framed.signature).toBe(strictSignature);
+      expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n");
+    }
+  });
+
+  it("rejects forbidden bytes, non-literal framing, and an invalid signature block", () => {
+    for (const [raw, code] of [
+      [new Uint8Array(), "WARRANT_ENVELOPE_EMPTY_POLICY"],
+      [utf8(` \t\n## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_EMPTY_POLICY"],
+      [utf8(`﻿version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_BOM"],
+      [utf8(`version: 2.1.0\r\n## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_CR"],
+      [new Uint8Array([...utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`), 0]), "WARRANT_ENVELOPE_STRICT_NUL"],
+      [utf8(`## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
+      [utf8(`version: 2.1.0 ## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
+      [utf8(`version: 2.1.0\n## Signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
+      [utf8("version: 2.1.0\n## signature\nsigil-sig: short"), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
+      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature.slice(0, -1)}!`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
+      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
+      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}\n## signature`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
+      [new Uint8Array(256 * 1024 + 1), "WARRANT_ENVELOPE_STRICT_SIZE"],
+    ] as const) {
+      try {
+        frameWarrantMarkdownBytes(raw);
+        throw new Error(`Expected strict framing to reject ${code}`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(WarrantEnvelopeError);
+        expect(error).toMatchObject({ code });
+      }
+    }
+    try {
+      frameWarrantMarkdownBytes(
+        utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`),
+        { maxBytes: 8 },
+      );
+      throw new Error("Expected configured byte limit to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(WarrantEnvelopeError);
+      expect(error).toMatchObject({ code: "WARRANT_ENVELOPE_STRICT_SIZE" });
+    }
   });
 };
 
