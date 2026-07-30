@@ -160,6 +160,7 @@ const throwStrictEnvelopeError = (code: WarrantEnvelopeErrorCode, message: strin
   throw new WarrantEnvelopeError(code, message);
 };
 
+// skipcq: JS-R1005 - The ordered strict size failures expose stable public error codes.
 const assertStrictByteLimit = (raw: Uint8Array, options: StrictWarrantFramingOptions): void => {
   const maximumBytes = options.maxBytes ?? strictWarrantMaximumBytes;
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0 || maximumBytes > strictWarrantMaximumBytes || raw.length > maximumBytes) {
@@ -170,6 +171,7 @@ const assertStrictByteLimit = (raw: Uint8Array, options: StrictWarrantFramingOpt
   }
 };
 
+// skipcq: JS-R1005 - Each raw-byte rejection maps to a distinct strict framing error code.
 const assertStrictRawBytes = (raw: Uint8Array): void => {
   if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) {
     throwStrictEnvelopeError("WARRANT_ENVELOPE_STRICT_BOM", "Strict Warrant framing forbids a UTF-8 BOM");
@@ -203,6 +205,7 @@ const isCanonical64ByteBase64url = (signature: string): boolean => {
     && (base64urlAlphabet.indexOf(finalCharacter) & 0x0f) === 0;
 };
 
+// skipcq: JS-R1005 - Signature structure and canonical encoding failures must remain distinct.
 const strictSignatureFromBlock = (markdown: string, headerIndex: number): string => {
   const signatureBlock = markdown.slice(headerIndex + strictSignatureHeader.length);
   const finalNewline = signatureBlock.indexOf("\n");
@@ -218,6 +221,7 @@ const strictSignatureFromBlock = (markdown: string, headerIndex: number): string
   return signature;
 };
 
+// skipcq: JS-R1005 - The strict empty-policy outcome depends on this ordered byte scan.
 const strictPreimages = (raw: Uint8Array, headerByteIndex: number): Pick<WarrantMarkdownFrame, "unsigned" | "legacyUnsigned"> => {
   let payloadEnd = headerByteIndex;
   while (payloadEnd > 0) {

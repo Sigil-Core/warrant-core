@@ -43,7 +43,6 @@ function bytesFromBase64url(value: string): Uint8Array {
 
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
 const strictSignature = "A".repeat(86);
-const strictVerificationSignature = "v26aX93x6jrQjDoNe0j1PLGKZiTVs2u1cRh4KHygANQc0tXvrZR-6xA55gt8BMeDzwxXuCnO0CRJyaRTSJNWCg";
 const decodeUtf8 = (value: Uint8Array): string => new TextDecoder("utf-8", { ignoreBOM: true }).decode(value);
 const signedWarrant = (unsigned: string): Uint8Array =>
   utf8(`${unsigned.trimEnd()}\n\n## signature\nsigil-sig: ${strictSignature}\n`);
@@ -263,6 +262,11 @@ const envelopeBytes = (vector: { rawUtf8?: string; rawHex?: string }): Uint8Arra
   throw new Error("Envelope vector must contain rawUtf8 or rawHex");
 };
 
+const strictEnvelopeBytes = (vector: { rawUtf8?: string; rawHex?: string; rawByteLength?: number }): Uint8Array => {
+  if (vector.rawByteLength !== undefined) return new Uint8Array(vector.rawByteLength);
+  return envelopeBytes(vector);
+};
+
 const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
   for (const vector of envelopeV1Fixture.table) {
     it(`matches the ${vector.id} sigil-envelope-v1 vector`, () => {
@@ -311,47 +315,34 @@ const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
     expect(decodeUtf8(signedEnvelopeParse(signed).payload)).toBe(vector.payloadUtf8);
   });
 
-  it("preserves raw UTF-8 framing and signature bytes", () => {
-    const signed = utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`);
-    const framed = frameWarrantMarkdownBytes(signed);
-    expect(framed.raw).toEqual(signed);
-    expect(framed.markdown).toBe(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`);
-    expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n");
-    expect(framed.signature).toBe(strictSignature);
-  });
-
-  it("accepts the existing emitter and collapses its blank-line separator to one signed LF", () => {
-    const payload = utf8("version: 2.1.0\n\n## tool_calls\nallowed: web_fetch\n");
-    const signed = emit(payload, strictSignature);
-    const framed = frameWarrantMarkdownBytes(signed);
-    expect(framed.raw).toEqual(signed);
-    expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n\n## tool_calls\nallowed: web_fetch\n");
-    expect(framed.signature).toBe(strictSignature);
-  });
-
-  it("preserves the legacy emitter preimage while separating it from the CC-1 preimage", async () => {
-    const legacyVector = signatureFixture.vectors.find((vector) => vector.id === "signature-block-test-only-policy");
-    if (!legacyVector?.signedMarkdown || !legacyVector.signatureBase64url || !legacyVector.key) {
-      throw new Error("Missing legacy Warrant signature verification vector");
-    }
-    const publicKey = bytesFromBase64url(signatureFixture.keys[legacyVector.key as "rfc8032Test1"].rawPublicKeyBase64url);
-    const signature = bytesFromBase64url(legacyVector.signatureBase64url);
-    const framed = frameWarrantMarkdownBytes(utf8(legacyVector.signedMarkdown));
-    const verify = requiredEd25519Verifier(adapter);
-    await expect(verify(publicKey, signature, framed.legacyUnsigned)).resolves.toBe(true);
-    await expect(verify(publicKey, signature, framed.unsigned)).resolves.toBe(false);
-  });
-
-  it("uses the CC-1 one-LF preimage for a strict Ed25519 signature", async () => {
-    const strictUnsigned = "version: 2.1.0\n## tool_calls\nallowed: web_fetch\n";
-    const raw = utf8(`${strictUnsigned}## signature\nsigil-sig: ${strictVerificationSignature}\n`);
-    const framed = frameWarrantMarkdownBytes(raw);
-    const publicKey = bytesFromBase64url(signatureFixture.keys.rfc8032Test1.rawPublicKeyBase64url);
-    const signature = bytesFromBase64url(strictVerificationSignature);
-    expect(framed.unsigned).toEqual(utf8(strictUnsigned));
-    await expect(requiredEd25519Verifier(adapter)(publicKey, signature, framed.unsigned)).resolves.toBe(true);
-    await expect(requiredEd25519Verifier(adapter)(publicKey, signature, framed.legacyUnsigned)).resolves.toBe(false);
-  });
+  for (const vector of envelopeV1Fixture.strictCc1.table) {
+    it(`matches the ${vector.id} strict CC-1 framing vector`, async () => {
+      const raw = strictEnvelopeBytes(vector);
+      if (vector.outcome === "reject") {
+        try {
+          frameWarrantMarkdownBytes(raw, vector.options);
+          throw new Error(`Expected ${vector.id} to reject`);
+        } catch (error) {
+          expect(error).toBeInstanceOf(WarrantEnvelopeError);
+          expect(error).toMatchObject({ code: vector.code });
+        }
+        return;
+      }
+      const framed = frameWarrantMarkdownBytes(raw, vector.options);
+      expect(framed.raw).toEqual(raw);
+      expect(decodeUtf8(framed.unsigned)).toBe(vector.unsignedUtf8);
+      expect(decodeUtf8(framed.legacyUnsigned)).toBe(vector.legacyUnsignedUtf8);
+      expect(framed.signature).toBe(vector.signature);
+      if (!vector.verification) return;
+      const signature = bytesFromBase64url(vector.signature);
+      const publicKey = bytesFromBase64url(vector.verification.publicKeyBase64url);
+      const accepted = vector.verification.preimage === "unsigned" ? framed.unsigned : framed.legacyUnsigned;
+      const rejected = vector.verification.rejectedPreimage === "unsigned" ? framed.unsigned : framed.legacyUnsigned;
+      const verify = requiredEd25519Verifier(adapter);
+      await expect(verify(publicKey, signature, accepted)).resolves.toBe(true);
+      await expect(verify(publicKey, signature, rejected)).resolves.toBe(false);
+    });
+  }
 
   it("frames a current Warrant Builder signed output without changing its raw bytes", () => {
     // Captured from the current Warrant Builder serializer shape (sigilcore
@@ -399,50 +390,6 @@ const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
     }
   });
 
-  it("accepts a missing or present final newline plus trailing whitespace only", () => {
-    for (const trailing of ["", "\n", "\n \t\n"]) {
-      const framed = frameWarrantMarkdownBytes(utf8(`version: 2.1.0\n \t\n\n## signature\nsigil-sig: ${strictSignature}${trailing}`));
-      expect(framed.signature).toBe(strictSignature);
-      expect(decodeUtf8(framed.unsigned)).toBe("version: 2.1.0\n");
-    }
-  });
-
-  it("rejects forbidden bytes, non-literal framing, and an invalid signature block", () => {
-    for (const [raw, code] of [
-      [new Uint8Array(), "WARRANT_ENVELOPE_EMPTY_POLICY"],
-      [utf8(` \t\n## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_EMPTY_POLICY"],
-      [utf8(`﻿version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_BOM"],
-      [utf8(`version: 2.1.0\r\n## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_CR"],
-      [new Uint8Array([...utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`), 0]), "WARRANT_ENVELOPE_STRICT_NUL"],
-      [utf8(`## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
-      [utf8(`version: 2.1.0 ## signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
-      [utf8(`version: 2.1.0\n## Signature\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_HEADER"],
-      [utf8("version: 2.1.0\n## signature\nsigil-sig: short"), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
-      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${"A".repeat(85)}B`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
-      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature.slice(0, -1)}!`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
-      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}\nsigil-sig: ${strictSignature}`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
-      [utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}\n## signature`), "WARRANT_ENVELOPE_STRICT_SIGNATURE"],
-      [new Uint8Array(256 * 1024 + 1), "WARRANT_ENVELOPE_STRICT_SIZE"],
-    ] as const) {
-      try {
-        frameWarrantMarkdownBytes(raw);
-        throw new Error(`Expected strict framing to reject ${code}`);
-      } catch (error) {
-        expect(error).toBeInstanceOf(WarrantEnvelopeError);
-        expect(error).toMatchObject({ code });
-      }
-    }
-    try {
-      frameWarrantMarkdownBytes(
-        utf8(`version: 2.1.0\n## signature\nsigil-sig: ${strictSignature}`),
-        { maxBytes: 8 },
-      );
-      throw new Error("Expected configured byte limit to reject");
-    } catch (error) {
-      expect(error).toBeInstanceOf(WarrantEnvelopeError);
-      expect(error).toMatchObject({ code: "WARRANT_ENVELOPE_STRICT_SIZE" });
-    }
-  });
 };
 
 const defineSharedPhaseOneParserTests = (adapter: CryptoAdapter): void => {
