@@ -267,6 +267,45 @@ const strictEnvelopeBytes = (vector: { rawUtf8?: string; rawHex?: string; rawByt
   return envelopeBytes(vector);
 };
 
+const assertStrictCc1Rejection = (vector: typeof envelopeV1Fixture.strictCc1.table[number]): void => {
+  try {
+    frameWarrantMarkdownBytes(strictEnvelopeBytes(vector), vector.options);
+    throw new Error(`Expected ${vector.id} to reject`);
+  } catch (error) {
+    expect(error).toBeInstanceOf(WarrantEnvelopeError);
+    expect(error).toMatchObject({ code: vector.code });
+  }
+};
+
+const framePreimage = (frame: ReturnType<typeof frameWarrantMarkdownBytes>, kind: string): Uint8Array =>
+  kind === "unsigned" ? frame.unsigned : frame.legacyUnsigned;
+
+const assertStrictCc1Acceptance = async (
+  vector: typeof envelopeV1Fixture.strictCc1.table[number],
+  adapter: CryptoAdapter,
+): Promise<void> => {
+  const raw = strictEnvelopeBytes(vector);
+  const framed = frameWarrantMarkdownBytes(raw, vector.options);
+  expect(framed.raw).toEqual(raw);
+  expect(decodeUtf8(framed.unsigned)).toBe(vector.unsignedUtf8);
+  expect(decodeUtf8(framed.legacyUnsigned)).toBe(vector.legacyUnsignedUtf8);
+  expect(framed.signature).toBe(vector.signature);
+  if (!vector.verification) return;
+  const signature = bytesFromBase64url(vector.signature);
+  const publicKey = bytesFromBase64url(vector.verification.publicKeyBase64url);
+  const verify = requiredEd25519Verifier(adapter);
+  await expect(verify(publicKey, signature, framePreimage(framed, vector.verification.preimage))).resolves.toBe(true);
+  await expect(verify(publicKey, signature, framePreimage(framed, vector.verification.rejectedPreimage))).resolves.toBe(false);
+};
+
+const assertStrictCc1Vector = async (
+  vector: typeof envelopeV1Fixture.strictCc1.table[number],
+  adapter: CryptoAdapter,
+): Promise<void> => {
+  if (vector.outcome === "reject") return assertStrictCc1Rejection(vector);
+  return assertStrictCc1Acceptance(vector, adapter);
+};
+
 const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
   for (const vector of envelopeV1Fixture.table) {
     it(`matches the ${vector.id} sigil-envelope-v1 vector`, () => {
@@ -316,32 +355,7 @@ const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
   });
 
   for (const vector of envelopeV1Fixture.strictCc1.table) {
-    it(`matches the ${vector.id} strict CC-1 framing vector`, async () => {
-      const raw = strictEnvelopeBytes(vector);
-      if (vector.outcome === "reject") {
-        try {
-          frameWarrantMarkdownBytes(raw, vector.options);
-          throw new Error(`Expected ${vector.id} to reject`);
-        } catch (error) {
-          expect(error).toBeInstanceOf(WarrantEnvelopeError);
-          expect(error).toMatchObject({ code: vector.code });
-        }
-        return;
-      }
-      const framed = frameWarrantMarkdownBytes(raw, vector.options);
-      expect(framed.raw).toEqual(raw);
-      expect(decodeUtf8(framed.unsigned)).toBe(vector.unsignedUtf8);
-      expect(decodeUtf8(framed.legacyUnsigned)).toBe(vector.legacyUnsignedUtf8);
-      expect(framed.signature).toBe(vector.signature);
-      if (!vector.verification) return;
-      const signature = bytesFromBase64url(vector.signature);
-      const publicKey = bytesFromBase64url(vector.verification.publicKeyBase64url);
-      const accepted = vector.verification.preimage === "unsigned" ? framed.unsigned : framed.legacyUnsigned;
-      const rejected = vector.verification.rejectedPreimage === "unsigned" ? framed.unsigned : framed.legacyUnsigned;
-      const verify = requiredEd25519Verifier(adapter);
-      await expect(verify(publicKey, signature, accepted)).resolves.toBe(true);
-      await expect(verify(publicKey, signature, rejected)).resolves.toBe(false);
-    });
+    it(`matches the ${vector.id} strict CC-1 framing vector`, () => assertStrictCc1Vector(vector, adapter));
   }
 
   it("frames a current Warrant Builder signed output without changing its raw bytes", () => {
