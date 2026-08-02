@@ -1,6 +1,6 @@
 {
   "format": "sigil-sign-parser-parity/v1",
-  "sigilSignCommit": "915ff62003e59b24189e6c09f6dda2d8685bfcb9",
+  "sigilSignCommit": "08c1d7376de358a4bf4254c382b9bcc1fec33f83",
   "cases": [
     {
       "id": "evm-default-max-transaction",
@@ -906,6 +906,61 @@
     {
       "id": "duplicate-normalized-token-scalar",
       "markdown": "version: 2.0.0\n\n## evm\nallowed_actions: wallet.transfer\nallowed_chains: 1\ntoken.USDC.max_transaction: 100\ntoken.usdc.max_transaction: 200",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-tool-calls-allowed-lines",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: bash\nallowed: web_fetch",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-tool-calls-block-then-inline-allowed",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed:\n  - bash\nallowed: web_fetch",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-tool-calls-require-shim",
+      "markdown": "version: 2.0.0\n\n## tool_calls\nallowed: bash\nrequire_shim: true\nrequire_shim: false",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-custom-require-approval",
+      "markdown": "version: 2.0.0\n\n## custom\ndeny_string: rm -rf\nrequire_approval: bash\nrequire_approval: web_fetch",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-mcp-allowed-tools",
+      "markdown": "version: 2.0.0\n\n## mcp\nallowed_servers: github\nallowed_tools: get_issue\nallowed_tools: create_issue",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-soft-limits-daily-tool-calls",
+      "markdown": "version: 2.0.0\n\n## soft_limits\ndaily_tool_calls: 100\ndaily_tool_calls: 200",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-execution-limits-max-tool-calls-per-task",
+      "markdown": "version: 2.0.0\n\n## execution_limits\nmax_tool_calls_per_task: 10\nmax_tool_calls_per_task: 20",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-policy-2-1-repository-roots",
+      "markdown": "version: 2.1.0\n\n## repository\nroots: /srv/app\nroots: /srv/other",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-policy-2-1-filesystem-write-roots",
+      "markdown": "version: 2.1.0\n\n## filesystem\nactions: file.write\nwrite_roots: /srv/app\nwrite_roots: /tmp",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-policy-2-1-git-protected-refs",
+      "markdown": "version: 2.1.0\n\n## git\nactions: git.push\nprotected_refs: refs/heads/main\nprotected_refs: refs/heads/release",
+      "outcome": "reject"
+    },
+    {
+      "id": "duplicate-policy-2-1-database-allowed-operations",
+      "markdown": "version: 2.1.0\n\n## database\nactions: db.query\nallowed_operations: select\nallowed_operations: delete",
       "outcome": "reject"
     }
   ]

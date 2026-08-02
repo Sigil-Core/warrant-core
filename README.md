@@ -9,7 +9,7 @@ The root entry point has no Node.js, browser, Cloudflare, network, or framework 
 This package is published as a public npm package after its initial owner-controlled release.
 
 ```sh
-npm install @sigilcore/warrant-core@0.2.3
+npm install @sigilcore/warrant-core@0.2.4
 ```
 
 Security-sensitive consumers must pin the full reviewed version. Do not use a caret, tilde, range, or the `latest` tag.
@@ -30,10 +30,18 @@ published Git head is `479673ea735d0059989c68c6b25cb1b206e64b45`. Tag `v0.2.2`
 and trusted-publisher workflow run `30278830707` bind the release evidence. npm
 records SLSA provenance for this release.
 
-Version `0.2.3` is the next immutable release candidate. It re-pins the
-byte-identical parser corpus to Sigil Sign `915ff62003e59b24189e6c09f6dda2d8685bfcb9`.
-Do not claim npm integrity or provenance for `0.2.3` until the trusted-publisher
-workflow has completed.
+`@sigilcore/warrant-core@0.2.3` re-pins the byte-identical parser corpus to
+Sigil Sign `915ff62003e59b24189e6c09f6dda2d8685bfcb9`. Its npm dist integrity is
+`sha512-49Qw4zzb/9nqwyzYqEHs+yZ+77h9mc9QJPKgfFpqBW9nvBI4h28DtZsxpwqN7ATE4g4hMtXLhdBocOYQ3tdCmw==`,
+its SHA-1 shasum is `f4654a3d6c879e558a63f4566227d2ba6267bb47`, and its
+published Git head is `d04fd7482e40d6652ddff45dc964c8dd8b6a34fe`. Tag `v0.2.3`
+and trusted-publisher workflow run `30541352312` bind the release evidence. npm
+records SLSA provenance for this release.
+
+Version `0.2.4` is the next immutable release candidate. It extends the frozen
+parser corpus with duplicate-key reject cases and re-pins it to Sigil Sign
+`08c1d7376de358a4bf4254c382b9bcc1fec33f83`. Do not claim npm integrity or
+provenance for `0.2.4` until the trusted-publisher workflow has completed.
 
 ## Public API
 
@@ -193,7 +201,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against reviewed Sigil Sign commit `915ff62003e59b24189e6c09f6dda2d8685bfcb9`. The re-pin was checked with no `src/lex` diff and the frozen six canonical policies plus 94 edge cases. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against reviewed Sigil Sign commit `08c1d7376de358a4bf4254c382b9bcc1fec33f83`. That commit is the only `src/lex` change since the previous pin `915ff62003e59b24189e6c09f6dda2d8685bfcb9`: it makes Sign reject duplicate policy keys within a `warranty.md` section instead of silently keeping the first declaration. This package needed no parser change, because its own section parser already rejected those inputs. The re-pin was checked against the frozen six canonical policies plus 105 edge cases, which now include eleven duplicate-key reject vectors covering `tool_calls`, `custom`, `mcp`, `soft_limits`, `execution_limits`, and the Policy 2.1 `repository`, `filesystem`, `git`, and `database` profiles. The corpus asserts outcome parity, not error text, and the two parsers word their duplicate-key rejections differently. One vector, `duplicate-tool-calls-block-then-inline-allowed`, rejects on both sides for different reasons: Sign parses the block-format list and then rejects the inline redeclaration as a duplicate, while this package rejects the block-format line itself because it accepts only inline comma-separated lists. That block-format divergence is pre-existing and intentional, so the vector guards Sign's duplicate detection rather than this package's. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign
