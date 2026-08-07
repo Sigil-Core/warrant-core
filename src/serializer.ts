@@ -1,4 +1,6 @@
 import type { ParsedPolicy } from "./types.js";
+import { policyVersionRange } from "./capabilities.js";
+import { mcpResponseCoverageProblem } from "./policy.js";
 
 type RecordValue = Record<string, unknown>;
 
@@ -176,6 +178,7 @@ const customSection = (value: unknown): string | undefined => {
   if (value === undefined) return undefined;
   if (!isRecord(value) || !Array.isArray(value.rules)) throw new TypeError("custom.rules must be an array");
   const lines: string[] = [];
+  const responseDenyStrings = new Set<string>();
   for (const rule of value.rules) {
     if (!isRecord(rule) || typeof rule.type !== "string") throw new TypeError("custom rule must be an object with a type");
     if (rule.type === "allow_field") {
@@ -187,10 +190,112 @@ const customSection = (value: unknown): string | undefined => {
       lines.push(`deny_if.${scalar(rule.fieldPath, "custom.fieldPath")} ${scalar(rule.operator, "custom.operator")} ${customScalar(rule.value, "custom.value")}`);
     } else if (rule.type === "deny_string") {
       lines.push(`deny_string: ${customScalar(rule.value, "custom.value")}`);
+    } else if (rule.type === "response_deny_string") {
+      if (typeof rule.value !== "string" || rule.value.length === 0) {
+        throw new TypeError("custom response deny string must be nonempty");
+      }
+      if (responseDenyStrings.has(rule.value)) {
+        throw new TypeError("Duplicate response.deny_string literal");
+      }
+      responseDenyStrings.add(rule.value);
+      lines.push(`response.deny_string: ${JSON.stringify(rule.value)}`);
     } else throw new TypeError(`Unsupported custom rule type ${rule.type}`);
   }
   genericControls(lines, value, "custom");
   return lines.length ? `## custom\n${lines.join("\n")}` : undefined;
+};
+
+const responseCoverage = (value: RecordValue, path: string): string[] => {
+  const web = value.webFetchTools;
+  const http = value.httpTools;
+  for (const [list, listPath] of [[web, `${path}.webFetchTools`], [http, `${path}.httpTools`]] as const) {
+    if (list !== undefined && (!Array.isArray(list) || list.length === 0
+      || list.some((entry) => typeof entry !== "string" || entry.length === 0
+        || entry.trim() !== entry || entry.includes("*") || entry.includes(",") || /[\r\n]/.test(entry))
+      || new Set(list).size !== list.length)) {
+      throw new TypeError(`${listPath} must contain unique nonempty literal tool names`);
+    }
+    if (Array.isArray(list)
+      && list.some((entry, index) => index > 0 && list[index - 1]! > entry)) {
+      throw new TypeError(`${listPath} must be lexicographically sorted`);
+    }
+  }
+  const covered = [...((web as string[] | undefined) ?? []), ...((http as string[] | undefined) ?? [])];
+  if (new Set(covered).size !== covered.length) {
+    throw new TypeError("MCP response coverage contains duplicate entries across lists");
+  }
+  return covered;
+};
+
+const RESPONSE_CLASSES = new Set(["malicious_url", "pii", "prompt_injection", "secret"]);
+const responseBlockClasses = (value: unknown, path: string): string[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0
+    || value.some((entry) => typeof entry !== "string" || entry.length === 0)) {
+    throw new TypeError(`${path} must contain at least one nonempty response class`);
+  }
+  const classes = value as string[];
+  if (new Set(classes).size !== classes.length) {
+    throw new TypeError(`${path} contains duplicate response classes`);
+  }
+  if (classes.some((entry) => !RESPONSE_CLASSES.has(entry))) {
+    throw new TypeError(`${path} contains an unknown response class`);
+  }
+  if (classes.some((entry, index) => index > 0 && classes[index - 1]! > entry)) {
+    throw new TypeError(`${path} must be lexicographically sorted`);
+  }
+  return classes;
+};
+
+const assertResponsePolicySerialization = (policy: ParsedPolicy): void => {
+  const mcp = policy.mcp;
+  const response = isRecord(mcp) && isRecord(mcp.response) ? mcp.response : undefined;
+  const responseRules = (policy.custom?.rules ?? [])
+    .filter((rule) => isRecord(rule) && rule.type === "response_deny_string");
+  if (response === undefined && responseRules.length === 0) return;
+  if (!/^2\.2\.\d+$/.test(policy.version)) {
+    throw new TypeError("MCP response policy requires Policy 2.2.x");
+  }
+  const covered = response === undefined ? [] : responseCoverage(response, "mcp.response");
+  if (covered.length === 0) {
+    throw new TypeError(responseRules.length > 0
+      ? "response.deny_string requires MCP response coverage"
+      : "MCP response policy requires response.web_fetch_tools or response.http_tools");
+  }
+  if (response?.deterministicRuleset !== "sof-response-rules-v1") {
+    throw new TypeError("MCP response coverage requires response.deterministic_ruleset");
+  }
+  const problem = isRecord(mcp) && response
+    ? mcpResponseCoverageProblem(mcp, response)
+    : "MCP response policy requires response.web_fetch_tools or response.http_tools";
+  if (problem) throw new TypeError(problem);
+};
+
+const mcpSection = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new TypeError("mcp must be an object");
+  if (value.allowedServers === undefined && value.allowedTools === undefined && value.blockedTools === undefined) {
+    throw new TypeError("mcp must declare at least one of allowedServers, allowedTools, or blockedTools");
+  }
+  const lines: string[] = [];
+  add(lines, "allowed_servers", value.allowedServers, "mcp.allowedServers", true);
+  add(lines, "allowed_tools", value.allowedTools, "mcp.allowedTools", true);
+  add(lines, "blocked_tools", value.blockedTools, "mcp.blockedTools", true);
+  if (value.response !== undefined) {
+    if (!isRecord(value.response)) throw new TypeError("mcp.response must be an object");
+    add(lines, "response.web_fetch_tools", value.response.webFetchTools, "mcp.response.webFetchTools", true);
+    add(lines, "response.http_tools", value.response.httpTools, "mcp.response.httpTools", true);
+    add(lines, "response.deterministic_ruleset", value.response.deterministicRuleset, "mcp.response.deterministicRuleset");
+    add(
+      lines,
+      "response.block_classes",
+      responseBlockClasses(value.response.blockClasses, "mcp.response.blockClasses"),
+      "mcp.response.blockClasses",
+      true,
+    );
+  }
+  genericControls(lines, value, "mcp");
+  return lines.length ? `## mcp\n${lines.join("\n")}` : undefined;
 };
 
 /** Canonical policy emission used for page cutover in later phases. */
@@ -198,11 +303,15 @@ export const serializePolicyMarkdown = (policy: ParsedPolicy): string => {
   if (typeof policy.version !== "string" || !/^\d+\.\d+\.\d+$/.test(policy.version)) {
     throw new TypeError("policy.version must be semver X.Y.Z");
   }
+  if (policyVersionRange(policy.version) === undefined) {
+    throw new TypeError(`Policy version ${policy.version} is newer than this engine`);
+  }
+  assertResponsePolicySerialization(policy);
   const sections = [
     resourceSection("repository", policy.repository), resourceSection("filesystem", policy.filesystem),
     resourceSection("git", policy.git), resourceSection("database", policy.database), evmSection(policy.evm),
     toolCallsSection(policy.tool_calls), customSection(policy.custom),
-    serializeSimpleSection("mcp", policy.mcp, [["allowed_servers", "allowedServers", true], ["allowed_tools", "allowedTools", true], ["blocked_tools", "blockedTools", true]]),
+    mcpSection(policy.mcp),
     softLimitsSection(policy.soft_limits),
     serializeSimpleSection("execution_limits", policy.execution_limits, [["max_tool_calls_per_task", "maxToolCallsPerTask", false], ["max_tool_calls_per_hour", "maxToolCallsPerHour", false], ["max_model_spend_usd_per_task", "maxModelSpendUsdPerTask", false], ["max_model_tokens_per_task", "maxModelTokensPerTask", false]]),
   ].filter((section): section is string => section !== undefined);

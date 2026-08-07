@@ -120,6 +120,10 @@ jobs:
             package/dist/policy.d.ts.map \
             package/dist/policy.js \
             package/dist/policy.js.map \
+            package/dist/response-policy.d.ts \
+            package/dist/response-policy.d.ts.map \
+            package/dist/response-policy.js \
+            package/dist/response-policy.js.map \
             package/dist/serializer.d.ts \
             package/dist/serializer.d.ts.map \
             package/dist/serializer.js \

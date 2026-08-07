@@ -67,13 +67,15 @@ const ROOT_POLICY_KEYS = new Set([
   "require_calldata_enrichment", "calldata_unknown_selector",
   "allowed", "bash.blocked_commands", "web_fetch.blocked_domains", "file_write.blocked_paths", "email.require_approval", "email.allowed_recipients", "email.blocked_recipients",
   "http.allowed_methods", "http.allowed_hosts", "http.blocked_methods",
-  "deny_string", "allowed_servers", "allowed_tools", "blocked_tools",
+  "deny_string", "response.deny_string", "allowed_servers", "allowed_tools", "blocked_tools",
+  "response.web_fetch_tools", "response.http_tools", "response.deterministic_ruleset", "response.block_classes",
   "daily_tool_calls", "daily_evm_limit_eth",
   "max_tool_calls_per_task", "max_tool_calls_per_hour", "max_model_spend_usd_per_task", "max_model_tokens_per_task",
   ...Object.values(RESOURCE_CONFIG).flatMap((config) => Object.keys(config.keys)),
 ]);
 
 const ROOT_POLICY_SYNTAX = [
+  /^response\.[\w.]+\s*:/,
   /^token\.[A-Za-z0-9_]+\.(?:max_transaction|consensus_threshold|decimals|addresses)\s*:/,
   /^http\.method_rules\.[A-Za-z]+\.(?:require_query_matches|deny)\s*:/,
   /^cap\.[A-Za-z0-9_-]+\.(?:max_count|max_sum_usd|window|action|group_by|amount_field|window_days|window_hours|timezone)\s*:/,
@@ -163,8 +165,8 @@ function parseVersion(markdown: string): string {
   const version = values[0] ?? "0.0.0";
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid policy version "${version}"; expected semver X.Y.Z`);
   const [major = 0, minor = 0] = version.split(".").map(Number);
-  if (major > 2 || (major === 2 && minor > 1)) {
-    throw new Error(`Policy version ${version} is newer than this engine (supports 0.x, 1.x, 2.0.x, and 2.1.x)`);
+  if (major > 2 || (major === 2 && minor > 2)) {
+    throw new Error(`Policy version ${version} is newer than this engine (supports 0.x, 1.x, 2.0.x, 2.1.x, and 2.2.x)`);
   }
   return version;
 }
@@ -172,6 +174,10 @@ function parseVersion(markdown: string): string {
 const policyVersionParts = (version: string): { major: number; minor: number } => {
   const [major = 0, minor = 0] = version.split(".").map(Number);
   return { major, minor };
+};
+const isPolicy22 = (version: string): boolean => {
+  const { major, minor } = policyVersionParts(version);
+  return major === 2 && minor === 2;
 };
 
 function isRootPolicySyntax(line: string): boolean {
@@ -638,9 +644,35 @@ const parseCustomDenyString = (rules: Array<Record<string, unknown>>, line: stri
   rules.push({ name: `deny_string:${value}`, type: "deny_string", value });
   return true;
 };
-const parseCustomLine = (state: CustomParserState, line: string, isV2: boolean): boolean => {
+const parseResponseDenyString = (rules: Array<Record<string, unknown>>, line: string, version: string): boolean => {
+  const match = line.match(/^response\.deny_string:\s*(.*)$/);
+  if (!match) return false;
+  if (!isPolicy22(version)) throw new Error("response.deny_string requires Policy 2.2.x");
+  const raw = match[1] ?? "";
+  if (!/^"(?:[^"\\]|\\["\\/bfnrt]|\\u[0-9A-Fa-f]{4})*"$/.test(raw)) {
+    throw new Error("response.deny_string must be a nonempty JSON double-quoted string");
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("response.deny_string must be a nonempty JSON double-quoted string");
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("response.deny_string must be a nonempty JSON double-quoted string");
+  }
+  if (rules.some((rule) => rule.type === "response_deny_string" && rule.value === value)) {
+    throw new Error("Duplicate response.deny_string literal");
+  }
+  rules.push({ name: `response.deny_string:${value}`, type: "response_deny_string", value });
+  return true;
+};
+const parseCustomLine = (state: CustomParserState, line: string, isV2: boolean, version: string): boolean => {
   if (parseGenericControlLine(state.controls, line, isV2, state.genericControls)) return true;
-  return parseCustomAllow(state, line, isV2) || parseCustomDeny(state.rules, line) || parseCustomDenyString(state.rules, line);
+  return parseCustomAllow(state, line, isV2)
+    || parseCustomDeny(state.rules, line)
+    || parseCustomDenyString(state.rules, line)
+    || parseResponseDenyString(state.rules, line, version);
 };
 const hasEnforceableCustomRuleOrControl = (state: CustomParserState): boolean =>
   state.rules.length > 0 || state.controls.requireApproval !== undefined || state.controls.requireShim === true;
@@ -658,9 +690,9 @@ const finalizeCustom = (state: CustomParserState): { rules: Array<Record<string,
   }
   return { rules: state.rules, ...customControlProperties(state.controls) };
 };
-const parseCustom = (lines: string[], isV2: boolean): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined => {
+const parseCustom = (lines: string[], isV2: boolean, version: string): { rules: Array<Record<string, unknown>>; requireApproval?: string[]; requireShim?: boolean } | undefined => {
   const state: CustomParserState = { rules: [], controls: {}, genericControls: new Set<string>(), allows: new Map<string, Record<string, unknown>>(), operators: new Map<string, string>() };
-  for (const line of lines) if (!parseCustomLine(state, line, isV2)) throw new Error(`Unrecognized custom rule: ${line}`);
+  for (const line of lines) if (!parseCustomLine(state, line, isV2, version)) throw new Error(`Unrecognized custom rule: ${line}`);
   return finalizeCustom(state);
 };
 
@@ -681,6 +713,31 @@ const MCP_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, key: s
   require_approval: (result, key, value) => { result.requireApproval = actionList(value, key); },
   require_shim: (result, key, value) => { result.requireShim = boolean(value, key, true); },
 };
+const RESPONSE_CLASSES = new Set(["malicious_url", "pii", "prompt_injection", "secret"]);
+const responseList = (value: string, key: string): string[] => {
+  const values = value.split(",").map((entry) => entry.trim());
+  if (!values.length || values.some((entry) => entry.length === 0)) throw new Error(`${key} must contain at least one nonempty entry`);
+  if (values.some((entry) => entry.includes("*"))) throw new Error(`${key} does not permit wildcard coverage`);
+  if (new Set(values).size !== values.length) throw new Error(`${key} contains duplicate entries`);
+  return values.slice().sort();
+};
+const responseClassList = (value: string, key: string): string[] => {
+  const values = responseList(value, key);
+  if (values.some((entry) => !RESPONSE_CLASSES.has(entry))) throw new Error(`${key} contains an unknown response class`);
+  return values;
+};
+const applyMcpResponseValue = (response: Record<string, unknown>, key: string, value: string, version: string): boolean => {
+  if (!key.startsWith("response.")) return false;
+  if (!isPolicy22(version)) throw new Error(`${key} requires Policy 2.2.x`);
+  if (key === "response.web_fetch_tools") response.webFetchTools = responseList(value, key);
+  else if (key === "response.http_tools") response.httpTools = responseList(value, key);
+  else if (key === "response.deterministic_ruleset") {
+    if (value !== "sof-response-rules-v1") throw new Error("response.deterministic_ruleset must be sof-response-rules-v1");
+    response.deterministicRuleset = value;
+  } else if (key === "response.block_classes") response.blockClasses = responseClassList(value, key);
+  else throw new Error(`Unrecognized MCP policy key: ${key}`);
+  return true;
+};
 const parseMcpValue = (result: Record<string, unknown>, key: string, value: string): void => {
   const parser = MCP_VALUE_PARSERS[key];
   if (!parser) throw new Error(`Unrecognized MCP policy key: ${key}`);
@@ -689,20 +746,52 @@ const parseMcpValue = (result: Record<string, unknown>, key: string, value: stri
 const validateMcpToolOverlap = (result: Record<string, unknown>): void => {
   const allowed = result.allowedTools as string[] | undefined; const blocked = result.blockedTools as string[] | undefined;
   if (!allowed || !blocked) return;
-  const matchesPattern = (value: string, pattern: string) =>
-    value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
-  const overlap = allowed.filter((entry) => blocked.some((pattern) => matchesPattern(entry, pattern)));
+  const overlap = allowed.filter((entry) => blocked.some((pattern) => mcpBlockedToolMatches(entry, pattern)));
   if (overlap.length) throw new Error(`MCP policy lists the same tool in both allowed_tools and blocked_tools: ${overlap.join(", ")}`);
 };
 const requireMcpPolicy = (result: Record<string, unknown>): void => {
   if (!result.allowedServers && !result.allowedTools && !result.blockedTools) throw new Error("## mcp must declare at least one of allowed_servers, allowed_tools, or blocked_tools");
 };
-const parseMcp = (lines: string[], isV2: boolean): Record<string, unknown> => {
+export const mcpBlockedToolMatches = (value: string, pattern: string): boolean =>
+  value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
+export const mcpResponseCoverageProblem = (
+  result: Record<string, unknown>,
+  response: Record<string, unknown>,
+): string | undefined => {
+  if (Object.keys(response).length === 0) return;
+  const web = response.webFetchTools as string[] | undefined;
+  const http = response.httpTools as string[] | undefined;
+  const covered = [...(web ?? []), ...(http ?? [])];
+  if (covered.length === 0) return "MCP response policy requires response.web_fetch_tools or response.http_tools";
+  if (new Set(covered).size !== covered.length) return "MCP response coverage contains duplicate entries across lists";
+  if (response.deterministicRuleset !== "sof-response-rules-v1") {
+    return "MCP response coverage requires response.deterministic_ruleset";
+  }
+  const allowed = result.allowedTools as string[] | undefined;
+  if (!allowed || covered.some((entry) => !allowed.includes(entry))) {
+    return "MCP response coverage must be an exact literal member of allowed_tools";
+  }
+  const blocked = result.blockedTools as string[] | undefined;
+  if (blocked && covered.some((entry) => blocked.some((pattern) => mcpBlockedToolMatches(entry, pattern)))) {
+    return "MCP response coverage must not match blocked_tools";
+  }
+  return undefined;
+};
+const validateMcpResponse = (result: Record<string, unknown>, response: Record<string, unknown>): void => {
+  const problem = mcpResponseCoverageProblem(result, response);
+  if (problem) throw new Error(problem);
+};
+const parseMcp = (lines: string[], isV2: boolean, version: string): Record<string, unknown> => {
   if (!isV2) throw new Error("Policy block ## mcp requires version 2.0.0");
   const result: Record<string, unknown> = {};
-  for (const [key, value] of unique(lines, "MCP")) parseMcpValue(result, key, value);
+  const response: Record<string, unknown> = {};
+  for (const [key, value] of unique(lines, "MCP")) {
+    if (!applyMcpResponseValue(response, key, value, version)) parseMcpValue(result, key, value);
+  }
   requireMcpPolicy(result);
   validateMcpToolOverlap(result);
+  validateMcpResponse(result, response);
+  if (Object.keys(response).length > 0) result.response = response;
   return result;
 };
 
@@ -964,15 +1053,15 @@ const retainPolicyEntry = ([key, value]: [string, unknown]): boolean =>
 const removeEmpty = (policy: ParsedPolicy): ParsedPolicy =>
   Object.fromEntries(Object.entries(policy).filter(retainPolicyEntry)) as ParsedPolicy;
 
-type PolicySectionParser = (lines: string[], isV2: boolean, body: string) => Partial<ParsedPolicy>;
+type PolicySectionParser = (lines: string[], isV2: boolean, body: string, version: string) => Partial<ParsedPolicy>;
 const POLICY_SECTION_PARSERS: Record<string, PolicySectionParser> = {
   evm: (lines, isV2, body) => ({ evm: parseEvm(lines, isV2, body) }),
   tool_calls: (lines, isV2) => ({ tool_calls: parseToolCalls(lines, isV2) }),
-  custom: (lines, isV2) => {
-    const custom = parseCustom(lines, isV2);
+  custom: (lines, isV2, _body, version) => {
+    const custom = parseCustom(lines, isV2, version);
     return custom === undefined ? {} : { custom };
   },
-  mcp: (lines, isV2) => ({ mcp: parseMcp(lines, isV2) }),
+  mcp: (lines, isV2, _body, version) => ({ mcp: parseMcp(lines, isV2, version) }),
   soft_limits: (lines, isV2) => ({ soft_limits: parseSoftLimits(lines, isV2) }),
   execution_limits: (lines, isV2) => ({ execution_limits: parseExecutionLimits(lines, isV2) }),
 };
@@ -983,10 +1072,10 @@ const resourceSectionResult = (name: string, lines: string[]): Partial<ParsedPol
   if (name === "git") return { git: resource };
   return { database: resource };
 };
-const parsePolicySection = (section: Section, isV2: boolean): Partial<ParsedPolicy> => {
+const parsePolicySection = (section: Section, isV2: boolean, version: string): Partial<ParsedPolicy> => {
   const lines = cleanedLines(section.body);
   const parser = POLICY_SECTION_PARSERS[section.name];
-  if (parser) return parser(lines, isV2, section.body);
+  if (parser) return parser(lines, isV2, section.body, version);
   return resourceSectionResult(section.name, lines);
 };
 // skipcq: JS-R1005 - Version gates stay co-located so Policy 2.1 feature rejection remains auditable.
@@ -1007,7 +1096,13 @@ const assertPolicyCompatibility = (version: string, isV2: boolean, structural: s
 };
 const parsePolicySections = (version: string, isV2: boolean, sections: Section[]): ParsedPolicy => {
   const result: ParsedPolicy = { version };
-  for (const section of sections) Object.assign(result, parsePolicySection(section, isV2));
+  for (const section of sections) Object.assign(result, parsePolicySection(section, isV2, version));
+  const responseRules = result.custom?.rules.filter((rule) => rule.type === "response_deny_string") ?? [];
+  const response = result.mcp?.response as Record<string, unknown> | undefined;
+  const covered = [...((response?.webFetchTools as string[] | undefined) ?? []), ...((response?.httpTools as string[] | undefined) ?? [])];
+  if (responseRules.length > 0 && covered.length === 0) {
+    throw new Error("response.deny_string requires MCP response coverage");
+  }
   return result;
 };
 

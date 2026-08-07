@@ -4,15 +4,20 @@ import {
   appendSignatureBlock,
   canonicalizePgCommitV1,
   canonicalizePolicyObject,
+  canonicalizeCompiledResponsePolicyFormat1,
+  compileResponsePolicyFormat1,
+  compiledResponsePolicyFormat1Bytes,
   frameWarrantMarkdownBytes,
   emit,
   hashPgCommitV1,
+  hashCompiledResponsePolicyFormat1,
   hashPolicy,
   lintPolicyAdvisories,
   parsePolicyMarkdown,
   pgCommitV1Bytes,
   policyCanonicalBytes,
   sha256Hex,
+  serializePolicyMarkdown,
   signedEnvelopeParse,
   splitSignatureBlock,
   unsignedSigningPayload,
@@ -29,6 +34,7 @@ import parserPhase1Fixture from "../vectors/parser-phase1.json";
 import policyFixture from "../vectors/policy-fixtures.json";
 import sigilSignParserParityFixture from "../vectors/sigil-sign-parser-parity.json";
 import signatureFixture from "../vectors/signature-blocks.json";
+import responsePolicyFormat1Fixture from "../vectors/response-policy-format1.json";
 import {
   assertKnownParityDivergencesCovered,
   defineConsumerCompatibilityVectorTests,
@@ -79,6 +85,64 @@ export function pgCommitRejectionValue(kind: string): unknown {
 const defineSharedMcpToolOverlapTests = (runtime: string): void => {
   it(`rejects conflicting MCP tool allow and block patterns in ${runtime}`, () => {
     expect(() => parsePolicyMarkdown("version: 2.0.0\n\n## mcp\nallowed_tools: github.delete\nblocked_tools: github.*")).toThrow("same tool");
+  });
+};
+
+const FORMAT_1_DIGEST = "dd07aff020e1d03e08501105dc53bb6943ffbdb50629cac7c7b4b03d1bd7ce46";
+const FORMAT_1_CATALOG_DIGEST = "3f77896cf5a15475c0e9847201ffaa41f4b117b4d8e5051d035f982f55d3098d";
+const FORMAT_1_POLICY_HASH = "3".repeat(64);
+
+const compileSharedFormat1Vector = (index: number) => compileResponsePolicyFormat1(
+  parsePolicyMarkdown(responsePolicyFormat1Fixture.positive[index]!.markdown),
+  {
+    issuer: "https://sign.sigil.example",
+    keyId: "sign-key-1",
+    tenantId: "tenant-1",
+    taskId: "task-1",
+    policyHash: FORMAT_1_POLICY_HASH,
+    issuedAt: 1_800_000_000,
+    expiresAt: 1_800_000_300,
+    revocationEpoch: 7,
+    deterministicRulesetDigest: FORMAT_1_DIGEST,
+    classCatalogDigest: FORMAT_1_CATALOG_DIGEST,
+  },
+);
+
+const defineSharedResponsePolicyFormat1Tests = (runtime: string, adapter: CryptoAdapter): void => {
+  for (const vector of responsePolicyFormat1Fixture.positive) {
+    it(`matches the ${vector.id} Policy 2.2 parser vector in ${runtime}`, () => {
+      const policy = parsePolicyMarkdown(vector.markdown);
+      expect(policy).toEqual(vector.canonicalPolicy);
+      expect(parsePolicyMarkdown(serializePolicyMarkdown(policy))).toEqual(policy);
+    });
+  }
+  for (const vector of responsePolicyFormat1Fixture.negative) {
+    it(`rejects the ${vector.id} Policy 2.2 parser vector in ${runtime}`, () => {
+      expect(() => parsePolicyMarkdown(vector.markdown)).toThrow();
+    });
+  }
+  it(`compiles canonical format 1 response policy bytes in ${runtime}`, async () => {
+    const compiled = compileSharedFormat1Vector(2);
+    const canonical = canonicalizeCompiledResponsePolicyFormat1(compiled);
+    expect(canonical).toBe(responsePolicyFormat1Fixture.compiledFormat1.canonicalJson);
+    expect(compiledResponsePolicyFormat1Bytes(compiled)).toEqual(
+      new TextEncoder().encode(responsePolicyFormat1Fixture.compiledFormat1.canonicalJson),
+    );
+    await expect(hashCompiledResponsePolicyFormat1(adapter, compiled)).resolves.toBe(
+      responsePolicyFormat1Fixture.compiledFormat1.sha256,
+    );
+  });
+  it(`compiles fixed response deny literals in ${runtime}`, async () => {
+    const compiled = compileSharedFormat1Vector(3);
+    expect(compiled.policy.denyStrings).toEqual(["ignore previous instructions", "token:\\t"]);
+    const canonical = canonicalizeCompiledResponsePolicyFormat1(compiled);
+    expect(canonical).toBe(responsePolicyFormat1Fixture.compiledDenyFormat1.canonicalJson);
+    expect(compiledResponsePolicyFormat1Bytes(compiled)).toEqual(
+      new TextEncoder().encode(responsePolicyFormat1Fixture.compiledDenyFormat1.canonicalJson),
+    );
+    await expect(hashCompiledResponsePolicyFormat1(adapter, compiled)).resolves.toBe(
+      responsePolicyFormat1Fixture.compiledDenyFormat1.sha256,
+    );
   });
 };
 
@@ -145,6 +209,13 @@ const defineSharedParserHardeningTests = (): void => {
 const defineSharedPhase1ParserTests = (): void => {
   for (const parserCase of parserPhase1Fixture.cases) {
     it(`matches the ${parserCase.id} Phase 1 parser vector`, () => {
+      if (parserCase.id === "newer-2-minor") {
+        expect(parsePolicyMarkdown(parserCase.markdown)).toEqual({
+          version: "2.2.0",
+          tool_calls: { allowed: ["bash"] },
+        });
+        return;
+      }
       if (parserCase.outcome === "accept") {
         if (!("canonicalPolicy" in parserCase)) throw new Error(`Missing canonical policy for ${parserCase.id}`);
         expect(parsePolicyMarkdown(parserCase.markdown)).toEqual(parserCase.canonicalPolicy);
@@ -412,6 +483,18 @@ const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
 const defineSharedPhaseOneParserTests = (adapter: CryptoAdapter): void => {
   for (const vector of parserPhase1Fixture.cases) {
     it(`matches the ${vector.id} Phase 1 parser vector`, async () => {
+      if (vector.id === "newer-2-minor") {
+        const policy = parsePolicyMarkdown(vector.markdown);
+        expect(policy).toEqual({ version: "2.2.0", tool_calls: { allowed: ["bash"] } });
+        await expect(hashPolicy(adapter, policy)).resolves.toBe(
+          responsePolicyFormat1Fixture.compiledFormat1.newer2MinorPolicySha256,
+        );
+        await expect(hashPolicy(adapter, {
+          version: "2.2.0",
+          tool_calls: { allowed: ["bash"] },
+        })).resolves.toBe(responsePolicyFormat1Fixture.compiledFormat1.newer2MinorPolicySha256);
+        return;
+      }
       if (vector.outcome === "reject") {
         expect(() => parsePolicyMarkdown(vector.markdown)).toThrow(vector.error);
         return;
@@ -545,6 +628,7 @@ export const defineSharedRuntimeVectorTests = (runtime: string, adapter: CryptoA
     }
   });
   defineSharedMcpToolOverlapTests(runtime);
+  defineSharedResponsePolicyFormat1Tests(runtime, adapter);
   defineSharedToolCallControlTests(runtime);
   defineSharedPolicyCommitmentAndSignatureVectorTests(runtime, adapter);
 };

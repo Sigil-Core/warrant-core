@@ -119,6 +119,10 @@ const FIXED_SECTION_KEYS: Readonly<Record<string, ReadonlySet<string>>> = {
     "blocked_tools",
     "require_approval",
     "require_shim",
+    "response.web_fetch_tools",
+    "response.http_tools",
+    "response.deterministic_ruleset",
+    "response.block_classes",
   ]),
   soft_limits: new Set([
     "daily_evm_limit_eth",
@@ -516,7 +520,7 @@ const scanSection = (
       || directive.key === "calldata_unknown_selector"
       || directive.key.startsWith("http.method_rules.")
     );
-  if (v21Only && versionRange !== undefined && versionRange !== "2.1.x") {
+  if (v21Only && versionRange !== undefined && versionRange !== "2.1.x" && versionRange !== "2.2.x") {
     if (section.name in PROFILE_PATH_PREFIX) {
       errors.push(
         issue(
@@ -540,6 +544,18 @@ const scanSection = (
           ),
         );
       }
+    }
+  }
+  const responseDirectives = directives.filter((directive) => directive.key.startsWith("response."));
+  if (responseDirectives.length > 0 && versionRange !== undefined && versionRange !== "2.2.x") {
+    for (const directive of responseDirectives) {
+      errors.push(
+        issue(
+          "WARRANT_UNSUPPORTED_FIELD_VERSION",
+          canonicalDirectivePath(section.name, directive.key),
+          `${directive.key} requires Policy 2.2.x`,
+        ),
+      );
     }
   }
 };

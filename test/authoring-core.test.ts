@@ -66,6 +66,85 @@ describe("Phase 1 authoring core", () => {
     const input = parsePolicyMarkdown("version: 2.1.1\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\nrequire_calldata_enrichment: true\ncalldata_unknown_selector: deny\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.deny: true");
     const serialized = serializePolicyMarkdown(input);
     expect(parsePolicyMarkdown(serialized)).toEqual(input);
+    expect(() => serializePolicyMarkdown({ version: "2.3.0" }))
+      .toThrow("Policy version 2.3.0 is newer than this engine");
+  });
+
+  it("rejects invalid response-policy ASTs at the serializer boundary", () => {
+    const valid = parsePolicyMarkdown([
+      "version: 2.2.0",
+      "",
+      "## mcp",
+      "allowed_tools: fetch.server.fetch",
+      "response.web_fetch_tools: fetch.server.fetch",
+      "response.deterministic_ruleset: sof-response-rules-v1",
+      "",
+      "## custom",
+      "response.deny_string: \"ignore previous instructions\"",
+    ].join("\n"));
+    expect(() => serializePolicyMarkdown({ ...valid, version: "2.1.0" }))
+      .toThrow("requires Policy 2.2.x");
+    expect(() => serializePolicyMarkdown({
+      ...valid,
+      mcp: { ...valid.mcp, response: { webFetchTools: ["fetch.server.fetch"] } },
+    })).toThrow("requires response.deterministic_ruleset");
+    expect(() => serializePolicyMarkdown({
+      ...valid,
+      mcp: { ...valid.mcp, allowedTools: ["other.server.tool"] },
+    })).toThrow("exact literal member of allowed_tools");
+    expect(() => serializePolicyMarkdown({
+      ...valid,
+      mcp: { ...valid.mcp, response: undefined },
+    })).toThrow("response.deny_string requires MCP response coverage");
+    expect(() => serializePolicyMarkdown({
+      version: "2.2.0",
+      mcp: { requireShim: true },
+    })).toThrow("at least one of allowedServers, allowedTools, or blockedTools");
+    expect(() => serializePolicyMarkdown({
+      ...valid,
+      custom: { rules: [valid.custom!.rules[0]!, valid.custom!.rules[0]!] },
+    })).toThrow("Duplicate response.deny_string literal");
+    for (const blockClasses of [
+      [],
+      ["secret", "secret"],
+      ["malware"],
+      ["secret", "malicious_url"],
+    ]) {
+      expect(() => serializePolicyMarkdown({
+        ...valid,
+        mcp: {
+          ...valid.mcp,
+          response: { ...valid.mcp!.response, blockClasses: blockClasses as never },
+        },
+      })).toThrow(/response class|lexicographically sorted/);
+    }
+    for (const responseKey of ["webFetchTools", "httpTools"] as const) {
+      const unsortedTools = ["z.server.tool", "a.server.tool"];
+      expect(() => serializePolicyMarkdown({
+        ...valid,
+        mcp: {
+          ...valid.mcp,
+          allowedTools: unsortedTools,
+          response: {
+            deterministicRuleset: "sof-response-rules-v1",
+            [responseKey]: unsortedTools,
+          },
+        },
+      })).toThrow(`${responseKey} must be lexicographically sorted`);
+      for (const invalidTool of ["a.server.tool,b.server.tool", "a.server.tool\nb.server.tool", " a.server.tool"]) {
+        expect(() => serializePolicyMarkdown({
+          ...valid,
+          mcp: {
+            ...valid.mcp,
+            allowedTools: [invalidTool],
+            response: {
+              deterministicRuleset: "sof-response-rules-v1",
+              [responseKey]: [invalidTool],
+            },
+          },
+        })).toThrow("unique nonempty literal tool names");
+      }
+    }
   });
 
   it("preserves named soft-limit caps, empty resource profiles, and quoted custom whitespace", () => {

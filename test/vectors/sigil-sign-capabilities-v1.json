@@ -5,7 +5,8 @@
     "0.x",
     "1.x",
     "2.0.x",
-    "2.1.x"
+    "2.1.x",
+    "2.2.x"
   ],
   "feature_keys": [
     "policy.version",
@@ -24,7 +25,12 @@
     "tool_calls.http",
     "tool_calls.http.method_rules",
     "mcp",
+    "mcp.response.web_fetch_tools",
+    "mcp.response.http_tools",
+    "mcp.response.deterministic_ruleset",
+    "mcp.response.block_classes",
     "custom",
+    "custom.response.deny_string",
     "soft_limits",
     "soft_limits.cap",
     "execution_limits",
