@@ -21,6 +21,7 @@ import {
   signedEnvelopeParse,
   splitSignatureBlock,
   unsignedSigningPayload,
+  verifyCompiledResponsePolicyFormat1,
   WarrantEnvelopeError,
 } from "../../src/index.js";
 import type { CryptoAdapter, JsonValue } from "../../src/types.js";
@@ -145,6 +146,32 @@ const defineSharedResponsePolicyFormat1Tests = (runtime: string, adapter: Crypto
       responsePolicyFormat1Fixture.compiledDenyFormat1.sha256,
     );
   });
+  it(`verifies signed format 1 response policy bytes in ${runtime}`, async () => {
+    const fixture = responsePolicyFormat1Fixture.jwsFormat1;
+    const context = {
+      publicKey: bytesFromBase64url(fixture.publicKeySpkiBase64url),
+      issuer: "https://sign.sigil.example",
+      keyId: "sign-key-1",
+      tenantId: "tenant-1",
+      taskId: "task-1",
+      policyHash: FORMAT_1_POLICY_HASH,
+      revocationEpoch: 7,
+      deterministicRulesetDigest: FORMAT_1_DIGEST,
+      classCatalogDigest: FORMAT_1_CATALOG_DIGEST,
+      now: 1_800_000_000,
+    };
+    const verified = await verifyCompiledResponsePolicyFormat1(adapter, fixture.compactJws, context);
+    expect(verified.compiledPolicyDigest).toBe(fixture.expectedCompiledPolicyDigest);
+    await expect(verifyCompiledResponsePolicyFormat1(
+      adapter,
+      fixture.invalid.signatureCompactJws,
+      context,
+    )).rejects.toThrow("signature is invalid");
+    await expect(verifyCompiledResponsePolicyFormat1(adapter, fixture.compactJws, {
+      ...context,
+      taskId: fixture.invalid.claimTaskId,
+    })).rejects.toThrow("taskId mismatch");
+  });
 };
 
 const defineSharedToolCallControlTests = (runtime: string): void => {
@@ -210,13 +237,6 @@ const defineSharedParserHardeningTests = (): void => {
 const defineSharedPhase1ParserTests = (): void => {
   for (const parserCase of parserPhase1Fixture.cases) {
     it(`matches the ${parserCase.id} Phase 1 parser vector`, () => {
-      if (parserCase.id === "newer-2-minor") {
-        expect(parsePolicyMarkdown(parserCase.markdown)).toEqual({
-          version: "2.2.0",
-          tool_calls: { allowed: ["bash"] },
-        });
-        return;
-      }
       if (parserCase.outcome === "accept") {
         if (!("canonicalPolicy" in parserCase)) throw new Error(`Missing canonical policy for ${parserCase.id}`);
         expect(parsePolicyMarkdown(parserCase.markdown)).toEqual(parserCase.canonicalPolicy);
@@ -484,18 +504,6 @@ const defineSharedEnvelopeTests = (adapter: CryptoAdapter): void => {
 const defineSharedPhaseOneParserTests = (adapter: CryptoAdapter): void => {
   for (const vector of parserPhase1Fixture.cases) {
     it(`matches the ${vector.id} Phase 1 parser vector`, async () => {
-      if (vector.id === "newer-2-minor") {
-        const policy = parsePolicyMarkdown(vector.markdown);
-        expect(policy).toEqual({ version: "2.2.0", tool_calls: { allowed: ["bash"] } });
-        await expect(hashPolicy(adapter, policy)).resolves.toBe(
-          responsePolicyFormat1Fixture.compiledFormat1.newer2MinorPolicySha256,
-        );
-        await expect(hashPolicy(adapter, {
-          version: "2.2.0",
-          tool_calls: { allowed: ["bash"] },
-        })).resolves.toBe(responsePolicyFormat1Fixture.compiledFormat1.newer2MinorPolicySha256);
-        return;
-      }
       if (vector.outcome === "reject") {
         expect(() => parsePolicyMarkdown(vector.markdown)).toThrow(vector.error);
         return;
@@ -504,7 +512,9 @@ const defineSharedPhaseOneParserTests = (adapter: CryptoAdapter): void => {
       expect(policy).toEqual(vector.canonicalPolicy);
       // The hash is part of the cross-runtime parse contract: every accepted
       // vector must produce the same canonical bytes before consumers cut over.
-      expect(await hashPolicy(adapter, policy)).toBe(await hashPolicy(adapter, vector.canonicalPolicy));
+      const policyHash = await hashPolicy(adapter, policy);
+      expect(policyHash).toBe(await hashPolicy(adapter, vector.canonicalPolicy));
+      if ("canonicalPolicySha256" in vector) expect(policyHash).toBe(vector.canonicalPolicySha256);
     });
   }
 };
