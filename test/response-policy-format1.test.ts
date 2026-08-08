@@ -195,6 +195,60 @@ describe("CompiledResponsePolicy format 1", () => {
     }, COMPILE_INPUT)).toThrow("Compiled response policy payload exceeds 65536 bytes");
   });
 
+  it("rejects non-literal compiled coverage across validation and signed verification", async () => {
+    const compiled = compiledFixture();
+    const adapter = createNodeCryptoAdapter();
+    const signEd25519 = adapter.signEd25519;
+    if (signEd25519 === undefined) throw new Error("format 1 regression requires an Ed25519 signer");
+    const fixture = responsePolicyFormat1Fixture.jwsFormat1;
+    const privateKey = new Uint8Array(Buffer.from(fixture.privateKeyPkcs8Base64url, "base64url"));
+    const publicKey = new Uint8Array(Buffer.from(fixture.publicKeySpkiBase64url, "base64url"));
+    const headerSegment = base64url(encoder.encode(fixture.protectedHeaderCanonicalJson));
+    const context = {
+      publicKey,
+      issuer: compiled.issuer,
+      keyId: compiled.keyId,
+      tenantId: compiled.tenantId,
+      taskId: compiled.taskId,
+      policyHash: compiled.policyHash,
+      revocationEpoch: compiled.revocationEpoch,
+      deterministicRulesetDigest: RULESET_DIGEST,
+      classCatalogDigest: CLASS_CATALOG_DIGEST,
+      now: compiled.issuedAt,
+    };
+
+    for (const invalidTool of [
+      "*.server.request",
+      "api.server.request,other.server.request",
+      "api.server.request\nother.server.request",
+      " api.server.request",
+    ]) {
+      const invalidPolicy = {
+        ...compiled,
+        coveredTools: [invalidTool, "fetch.server.fetch"],
+        policy: { ...compiled.policy, httpTools: [invalidTool] },
+      };
+      expect(() => validateCompiledResponsePolicyFormat1(invalidPolicy))
+        .toThrow("coveredTools must contain exact literal tool names");
+
+      const payloadSegment = base64url(encoder.encode(canonicalizePgCommitV1(invalidPolicy)));
+      const signature = await signEd25519(
+        privateKey,
+        encoder.encode(`${headerSegment}.${payloadSegment}`),
+      );
+      await expect(verifyCompiledResponsePolicyFormat1(
+        adapter,
+        `${headerSegment}.${payloadSegment}.${base64url(signature)}`,
+        context,
+      )).rejects.toThrow("coveredTools must contain exact literal tool names");
+
+      expect(() => validateCompiledResponsePolicyFormat1({
+        ...invalidPolicy,
+        coveredTools: compiled.coveredTools,
+      })).toThrow("policy.httpTools must contain exact literal tool names");
+    }
+  });
+
   it("verifies canonical compact JWS bytes and trusted claims", async () => {
     const adapter = createNodeCryptoAdapter();
     const jwsFixture = responsePolicyFormat1Fixture.jwsFormat1;

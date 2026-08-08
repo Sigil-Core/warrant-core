@@ -106,6 +106,14 @@ const requireSortedUniqueStrings = (
   return strings;
 };
 
+const requireSortedUniqueLiteralToolNames = (value: unknown, path: string): string[] => {
+  const strings = requireSortedUniqueStrings(value, path);
+  if (strings.some((entry) => entry.trim() !== entry || /[*,\r\n]/.test(entry))) {
+    throw new TypeError(`${path} must contain exact literal tool names`);
+  }
+  return strings;
+};
+
 const validateBounds = (value: unknown): void => {
   if (!isRecord(value)) throw new TypeError("bounds must be an object");
   const keys = Object.keys(COMPILED_RESPONSE_POLICY_FORMAT_1_BOUNDS);
@@ -139,8 +147,8 @@ const validateFormat1Policy = (value: unknown): CompiledResponsePolicyFormat1Pol
   if (value.deterministicRuleset !== "sof-response-rules-v1") {
     throw new TypeError("policy.deterministicRuleset must equal sof-response-rules-v1");
   }
-  const web = value.webFetchTools === undefined ? [] : requireSortedUniqueStrings(value.webFetchTools, "policy.webFetchTools");
-  const http = value.httpTools === undefined ? [] : requireSortedUniqueStrings(value.httpTools, "policy.httpTools");
+  const web = value.webFetchTools === undefined ? [] : requireSortedUniqueLiteralToolNames(value.webFetchTools, "policy.webFetchTools");
+  const http = value.httpTools === undefined ? [] : requireSortedUniqueLiteralToolNames(value.httpTools, "policy.httpTools");
   if (web.length + http.length === 0) throw new TypeError("policy must contain response coverage");
   if (new Set([...web, ...http]).size !== web.length + http.length) {
     throw new TypeError("policy response coverage must be globally unique");
@@ -178,7 +186,7 @@ export function validateCompiledResponsePolicyFormat1(
     throw new TypeError("expiresAt must be after issuedAt by no more than 300 seconds");
   }
   requireSafeInteger(value.revocationEpoch, "revocationEpoch");
-  const coveredTools = requireSortedUniqueStrings(value.coveredTools, "coveredTools");
+  const coveredTools = requireSortedUniqueLiteralToolNames(value.coveredTools, "coveredTools");
   validateCatalogBinding(value.deterministicRuleset, "deterministicRuleset", "sof-response-rules-v1");
   validateCatalogBinding(value.classCatalog, "classCatalog", "sof-response-classes-v1");
   validateBounds(value.bounds);
@@ -206,10 +214,10 @@ export function compileResponsePolicyFormat1(
   }
   const webFetchTools = response.webFetchTools === undefined
     ? undefined
-    : requireSortedUniqueStrings(response.webFetchTools, "mcp.response.webFetchTools");
+    : requireSortedUniqueLiteralToolNames(response.webFetchTools, "mcp.response.webFetchTools");
   const httpTools = response.httpTools === undefined
     ? undefined
-    : requireSortedUniqueStrings(response.httpTools, "mcp.response.httpTools");
+    : requireSortedUniqueLiteralToolNames(response.httpTools, "mcp.response.httpTools");
   const blockClasses = response.blockClasses === undefined
     ? undefined
     : requireSortedUniqueStrings(response.blockClasses, "mcp.response.blockClasses", RESPONSE_CLASSES) as ResponsePolicyClass[];
