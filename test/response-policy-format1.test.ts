@@ -83,16 +83,28 @@ describe("CompiledResponsePolicy format 1", () => {
       ["fetch.server.fetch\nother.server.tool"],
       [" fetch.server.fetch"],
     ];
-    for (const key of ["allowedTools", "blockedTools"] as const) {
-      for (const invalid of invalidToolLists) {
-        expect(() => compileResponsePolicyFormat1({
-          ...source,
+    for (const invalid of invalidToolLists) {
+      for (const { key, mcp } of [
+        {
+          key: "allowedTools",
+          mcp: {
+            ...source.mcp,
+            allowedTools: invalid as never,
+            blockedTools: ["blocked.*"],
+          },
+        },
+        {
+          key: "blockedTools",
           mcp: {
             ...source.mcp,
             allowedTools: ["fetch.server.fetch", "other.*"],
-            blockedTools: ["blocked.*"],
-            [key]: invalid,
+            blockedTools: invalid as never,
           },
+        },
+      ] as const) {
+        expect(() => compileResponsePolicyFormat1({
+          ...source,
+          mcp,
         }, COMPILE_INPUT)).toThrow(`mcp.${key} must contain unique exact values or one trailing * wildcard`);
       }
     }

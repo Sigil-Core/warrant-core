@@ -726,7 +726,7 @@ export const assertMcpResponseExactKeys = (response: Record<string, unknown>): v
   if (unknownKey !== undefined) throw new TypeError(`mcp.response contains unknown field ${unknownKey}`);
 };
 
-export const assertMcpToolLists = (mcp: Record<string, unknown>): void => {
+export function assertMcpToolLists(mcp: Record<string, unknown>): void {
   for (const key of ["allowedTools", "blockedTools"] as const) {
     const value = mcp[key];
     if (value === undefined) continue;
@@ -737,7 +737,7 @@ export const assertMcpToolLists = (mcp: Record<string, unknown>): void => {
       throw new TypeError(`mcp.${key} must contain unique exact values or one trailing * wildcard`);
     }
   }
-};
+}
 
 const responseList = (value: string, key: string): string[] => {
   const values = value.split(",").map((entry) => entry.trim());
@@ -768,8 +768,9 @@ const parseMcpValue = (result: Record<string, unknown>, key: string, value: stri
   if (!parser) throw new Error(`Unrecognized MCP policy key: ${key}`);
   parser(result, key, value);
 };
-export const mcpBlockedToolMatches = (value: string, pattern: string): boolean =>
-  value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
+export function mcpBlockedToolMatches(value: string, pattern: string): boolean {
+  return value === pattern || (pattern.endsWith("*") && value.startsWith(pattern.slice(0, -1)));
+}
 const validateMcpToolOverlap = (result: Record<string, unknown>): void => {
   const allowed = result.allowedTools as string[] | undefined; const blocked = result.blockedTools as string[] | undefined;
   if (!allowed || !blocked) return;
@@ -779,10 +780,10 @@ const validateMcpToolOverlap = (result: Record<string, unknown>): void => {
 const requireMcpPolicy = (result: Record<string, unknown>): void => {
   if (!result.allowedServers && !result.allowedTools && !result.blockedTools) throw new Error("## mcp must declare at least one of allowed_servers, allowed_tools, or blocked_tools");
 };
-export const mcpResponseCoverageProblem = (
+export function mcpResponseCoverageProblem(
   result: Record<string, unknown>,
   response: Record<string, unknown>,
-): string | undefined => {
+): string | undefined {
   if (Object.keys(response).length === 0) return undefined;
   assertMcpToolLists(result);
   const web = response.webFetchTools as string[] | undefined;
@@ -802,7 +803,7 @@ export const mcpResponseCoverageProblem = (
     return "MCP response coverage must not match blocked_tools";
   }
   return undefined;
-};
+}
 const validateMcpResponse = (result: Record<string, unknown>, response: Record<string, unknown>): void => {
   const problem = mcpResponseCoverageProblem(result, response);
   if (problem) throw new Error(problem);

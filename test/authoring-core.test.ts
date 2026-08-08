@@ -168,7 +168,7 @@ describe("Phase 1 authoring core", () => {
 
   it("preserves padded quoted MCP tool tokens for legacy policies without response coverage", () => {
     for (const version of ["2.0.0", "2.1.1"]) {
-      expect(parsePolicyMarkdown(`version: ${version}\n\n## mcp\nallowed_tools: \" x \"`)).toEqual({
+      expect(parsePolicyMarkdown(`version: ${version}\n\n## mcp\nallowed_tools: " x "`)).toEqual({
         version,
         mcp: { allowedTools: [" x "] },
       });
