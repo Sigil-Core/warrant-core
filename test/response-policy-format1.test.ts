@@ -62,6 +62,17 @@ const compiledFixture = () => compileResponsePolicyFormat1(
 describe("CompiledResponsePolicy format 1", () => {
   it("rejects unknown payload fields and format-policy mismatches", () => {
     const compiled = compiledFixture();
+    const source = parsePolicyMarkdown("version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1");
+    expect(() => compileResponsePolicyFormat1(source, COMPILE_INPUT)).not.toThrow();
+    for (const unknownKey of ["redactClasses", "scanner"]) {
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: {
+          ...source.mcp,
+          response: { ...source.mcp?.response, [unknownKey]: ["secret"] },
+        },
+      }, COMPILE_INPUT)).toThrow(`mcp.response contains unknown field ${unknownKey}`);
+    }
     expect(() => validateCompiledResponsePolicyFormat1({ ...compiled, scanner: {} })).toThrow("unknown field scanner");
     expect(() => validateCompiledResponsePolicyFormat1({ ...compiled, policyVersion: "2.3.0" })).toThrow("2.2.x");
     expect(() => validateCompiledResponsePolicyFormat1({

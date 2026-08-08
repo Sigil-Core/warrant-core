@@ -1,5 +1,5 @@
 import { canonicalizePgCommitV1 } from "./commitment.js";
-import { mcpResponseCoverageProblem } from "./policy.js";
+import { assertMcpResponseExactKeys, mcpResponseCoverageProblem } from "./policy.js";
 import type {
   CompiledResponsePolicyBounds,
   CompiledResponsePolicyFormat1,
@@ -201,6 +201,7 @@ const responseFromPolicy = (policy: ParsedPolicy): Record<string, unknown> => {
   if (!/^2\.2\.\d+$/.test(policy.version)) throw new TypeError("Format 1 requires a Policy 2.2.x AST");
   const mcp = policy.mcp;
   if (!isRecord(mcp) || !isRecord(mcp.response)) throw new TypeError("Policy 2.2.x AST does not declare MCP response coverage");
+  assertMcpResponseExactKeys(mcp.response);
   return mcp.response;
 };
 

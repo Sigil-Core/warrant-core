@@ -87,6 +87,16 @@ describe("Phase 1 authoring core", () => {
     if (responseRule === undefined || validResponse === undefined) {
       throw new Error("valid response-policy fixture did not parse as expected");
     }
+    expect(serializePolicyMarkdown(valid)).toContain("response.deterministic_ruleset: sof-response-rules-v1");
+    for (const unknownKey of ["redactClasses", "scanner"]) {
+      expect(() => serializePolicyMarkdown({
+        ...valid,
+        mcp: {
+          ...valid.mcp,
+          response: { ...validResponse, [unknownKey]: ["secret"] },
+        },
+      })).toThrow(`mcp.response contains unknown field ${unknownKey}`);
+    }
     expect(() => serializePolicyMarkdown({ ...valid, version: "2.1.0" }))
       .toThrow("requires Policy 2.2.x");
     expect(() => serializePolicyMarkdown({

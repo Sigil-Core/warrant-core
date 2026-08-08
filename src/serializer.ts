@@ -1,6 +1,6 @@
 import type { ParsedPolicy } from "./types.js";
 import { policyVersionRange } from "./capabilities.js";
-import { mcpResponseCoverageProblem } from "./policy.js";
+import { assertMcpResponseExactKeys, mcpResponseCoverageProblem } from "./policy.js";
 
 type RecordValue = Record<string, unknown>;
 
@@ -256,6 +256,7 @@ const assertResponsePolicySerialization = (policy: ParsedPolicy): void => {
   const responseRules = (policy.custom?.rules ?? [])
     .filter((rule) => isRecord(rule) && rule.type === "response_deny_string");
   if (response === undefined && responseRules.length === 0) return;
+  if (response !== undefined) assertMcpResponseExactKeys(response);
   if (!/^2\.2\.\d+$/.test(policy.version)) {
     throw new TypeError("MCP response policy requires Policy 2.2.x");
   }

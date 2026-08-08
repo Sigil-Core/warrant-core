@@ -714,6 +714,18 @@ const MCP_VALUE_PARSERS: Record<string, (result: Record<string, unknown>, key: s
   require_shim: (result, key, value) => { result.requireShim = boolean(value, key, true); },
 };
 const RESPONSE_CLASSES = new Set(["malicious_url", "pii", "prompt_injection", "secret"]);
+const MCP_RESPONSE_KEYS = new Set([
+  "webFetchTools",
+  "httpTools",
+  "deterministicRuleset",
+  "blockClasses",
+]);
+
+export const assertMcpResponseExactKeys = (response: Record<string, unknown>): void => {
+  const unknownKey = Object.keys(response).find((key) => !MCP_RESPONSE_KEYS.has(key));
+  if (unknownKey !== undefined) throw new TypeError(`mcp.response contains unknown field ${unknownKey}`);
+};
+
 const responseList = (value: string, key: string): string[] => {
   const values = value.split(",").map((entry) => entry.trim());
   if (!values.length || values.some((entry) => entry.length === 0)) throw new Error(`${key} must contain at least one nonempty entry`);
