@@ -73,6 +73,37 @@ describe("CompiledResponsePolicy format 1", () => {
         },
       }, COMPILE_INPUT)).toThrow(`mcp.response contains unknown field ${unknownKey}`);
     }
+    const invalidToolLists: unknown[] = [
+      "prefixfetch.server.fetchsuffix",
+      [],
+      ["fetch.server.fetch", 3],
+      ["fetch.server.fetch", "fetch.server.fetch"],
+      ["fetch.*.invalid"],
+      ["fetch.server.fetch,other.server.tool"],
+      ["fetch.server.fetch\nother.server.tool"],
+      [" fetch.server.fetch"],
+    ];
+    for (const key of ["allowedTools", "blockedTools"] as const) {
+      for (const invalid of invalidToolLists) {
+        expect(() => compileResponsePolicyFormat1({
+          ...source,
+          mcp: {
+            ...source.mcp,
+            allowedTools: ["fetch.server.fetch", "other.*"],
+            blockedTools: ["blocked.*"],
+            [key]: invalid,
+          },
+        }, COMPILE_INPUT)).toThrow(`mcp.${key} must contain unique exact values or one trailing * wildcard`);
+      }
+    }
+    expect(() => compileResponsePolicyFormat1({
+      ...source,
+      mcp: {
+        ...source.mcp,
+        allowedTools: ["fetch.server.fetch", "other.*"],
+        blockedTools: ["blocked.*"],
+      },
+    }, COMPILE_INPUT)).not.toThrow();
     expect(() => validateCompiledResponsePolicyFormat1({ ...compiled, scanner: {} })).toThrow("unknown field scanner");
     expect(() => validateCompiledResponsePolicyFormat1({ ...compiled, policyVersion: "2.3.0" })).toThrow("2.2.x");
     expect(() => validateCompiledResponsePolicyFormat1({

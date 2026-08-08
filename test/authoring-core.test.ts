@@ -97,6 +97,10 @@ describe("Phase 1 authoring core", () => {
         },
       })).toThrow(`mcp.response contains unknown field ${unknownKey}`);
     }
+    expect(() => serializePolicyMarkdown({
+      ...valid,
+      mcp: { ...valid.mcp, allowedTools: "prefixfetch.server.fetchsuffix" as never },
+    })).toThrow("mcp.allowedTools must contain unique exact values or one trailing * wildcard");
     expect(() => serializePolicyMarkdown({ ...valid, version: "2.1.0" }))
       .toThrow("requires Policy 2.2.x");
     expect(() => serializePolicyMarkdown({
@@ -159,6 +163,15 @@ describe("Phase 1 authoring core", () => {
           },
         })).toThrow("unique nonempty literal tool names");
       }
+    }
+  });
+
+  it("preserves padded quoted MCP tool tokens for legacy policies without response coverage", () => {
+    for (const version of ["2.0.0", "2.1.1"]) {
+      expect(parsePolicyMarkdown(`version: ${version}\n\n## mcp\nallowed_tools: \" x \"`)).toEqual({
+        version,
+        mcp: { allowedTools: [" x "] },
+      });
     }
   });
 

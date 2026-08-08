@@ -726,6 +726,19 @@ export const assertMcpResponseExactKeys = (response: Record<string, unknown>): v
   if (unknownKey !== undefined) throw new TypeError(`mcp.response contains unknown field ${unknownKey}`);
 };
 
+export const assertMcpToolLists = (mcp: Record<string, unknown>): void => {
+  for (const key of ["allowedTools", "blockedTools"] as const) {
+    const value = mcp[key];
+    if (value === undefined) continue;
+    if (!Array.isArray(value) || value.length === 0
+      || value.some((entry) => typeof entry !== "string" || entry.trim() !== entry
+        || /[,\r\n]/.test(entry) || !ACTION_PATTERN(entry))
+      || new Set(value).size !== value.length) {
+      throw new TypeError(`mcp.${key} must contain unique exact values or one trailing * wildcard`);
+    }
+  }
+};
+
 const responseList = (value: string, key: string): string[] => {
   const values = value.split(",").map((entry) => entry.trim());
   if (!values.length || values.some((entry) => entry.length === 0)) throw new Error(`${key} must contain at least one nonempty entry`);
@@ -771,6 +784,7 @@ export const mcpResponseCoverageProblem = (
   response: Record<string, unknown>,
 ): string | undefined => {
   if (Object.keys(response).length === 0) return undefined;
+  assertMcpToolLists(result);
   const web = response.webFetchTools as string[] | undefined;
   const http = response.httpTools as string[] | undefined;
   const covered = [...(web ?? []), ...(http ?? [])];
