@@ -108,6 +108,10 @@ jobs:
             package/dist/crypto/workers.d.ts.map \
             package/dist/crypto/workers.js \
             package/dist/crypto/workers.js.map \
+            package/dist/custom-rules.d.ts \
+            package/dist/custom-rules.d.ts.map \
+            package/dist/custom-rules.js \
+            package/dist/custom-rules.js.map \
             package/dist/html-comments.d.ts \
             package/dist/html-comments.d.ts.map \
             package/dist/html-comments.js \
@@ -120,6 +124,10 @@ jobs:
             package/dist/policy.d.ts.map \
             package/dist/policy.js \
             package/dist/policy.js.map \
+            package/dist/response-policy.d.ts \
+            package/dist/response-policy.d.ts.map \
+            package/dist/response-policy.js \
+            package/dist/response-policy.js.map \
             package/dist/serializer.d.ts \
             package/dist/serializer.d.ts.map \
             package/dist/serializer.js \
