@@ -98,7 +98,8 @@ const requireSortedUniqueStrings = (
   const strings = value as string[];
   for (const entry of strings) requireString(entry, `${path} entry`);
   if (new Set(strings).size !== strings.length) throw new TypeError(`${path} must contain unique values`);
-  if (strings.some((entry, index) => index > 0 && strings[index - 1]! > entry)) {
+  const sorted = [...strings].sort();
+  if (strings.some((entry, index) => entry !== sorted[index])) {
     throw new TypeError(`${path} must be lexicographically sorted`);
   }
   if (allowed && strings.some((entry) => !allowed.has(entry))) throw new TypeError(`${path} contains an unknown value`);
@@ -292,17 +293,18 @@ const digestHex = async (adapter: CryptoAdapter, bytes: Uint8Array): Promise<str
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-export async function hashCompiledResponsePolicyFormat1(
+export function hashCompiledResponsePolicyFormat1(
   adapter: CryptoAdapter,
   value: CompiledResponsePolicyFormat1,
 ): Promise<string> {
-  return digestHex(adapter, compiledResponsePolicyFormat1Bytes(value));
+  return Promise.resolve().then(() => digestHex(adapter, compiledResponsePolicyFormat1Bytes(value)));
 }
 
 const encodeBase64url = (bytes: Uint8Array): string => {
   let output = "";
   for (let index = 0; index < bytes.length; index += 3) {
-    const first = bytes[index]!;
+    const first = bytes[index];
+    if (first === undefined) break;
     const second = bytes[index + 1];
     const third = bytes[index + 2];
     output += BASE64URL[first >> 2];

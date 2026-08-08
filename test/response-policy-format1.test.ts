@@ -205,7 +205,12 @@ describe("CompiledResponsePolicy format 1", () => {
     const headerSegment = base64url(encoder.encode(jwsFixture.protectedHeaderCanonicalJson));
     const payloadSegment = base64url(compiledResponsePolicyFormat1Bytes(payload));
     const compactJws = jwsFixture.compactJws;
-    const signature = new Uint8Array(Buffer.from(compactJws.split(".")[2]!, "base64url"));
+    const signatureSegment = compactJws.split(".")[2];
+    const signEd25519 = adapter.signEd25519;
+    if (signatureSegment === undefined || signEd25519 === undefined) {
+      throw new Error("format 1 signing fixture requires a signature segment and Ed25519 signer");
+    }
+    const signature = new Uint8Array(Buffer.from(signatureSegment, "base64url"));
     expect(compactJws.startsWith(`${headerSegment}.${payloadSegment}.`)).toBe(true);
     const context = {
       publicKey,
@@ -227,7 +232,7 @@ describe("CompiledResponsePolicy format 1", () => {
       ...payloadWithoutAudience,
       audience,
     })));
-    const nonCanonicalPayloadSignature = await adapter.signEd25519!(
+    const nonCanonicalPayloadSignature = await signEd25519(
       privateKey,
       encoder.encode(`${headerSegment}.${nonCanonicalPayloadSegment}`),
     );
@@ -241,7 +246,7 @@ describe("CompiledResponsePolicy format 1", () => {
       kid: protectedHeader.kid,
       alg: protectedHeader.alg,
     })));
-    const nonCanonicalHeaderSignature = await adapter.signEd25519!(
+    const nonCanonicalHeaderSignature = await signEd25519(
       privateKey,
       encoder.encode(`${nonCanonicalHeaderSegment}.${payloadSegment}`),
     );
@@ -305,6 +310,7 @@ describe("CompiledResponsePolicy format 1", () => {
     const missingFormatVersionSegment = base64url(encoder.encode(
       canonicalizePgCommitV1(payloadWithoutFormatVersion),
     ));
+    // skipcq: JS-0061 - Deliberately exercise inherited-field rejection, then restore the prototype in finally.
     Object.defineProperty(Object.prototype, "formatVersion", {
       configurable: true,
       value: 1,

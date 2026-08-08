@@ -215,9 +215,11 @@ const responseCoverage = (value: RecordValue, path: string): string[] => {
       || new Set(list).size !== list.length)) {
       throw new TypeError(`${listPath} must contain unique nonempty literal tool names`);
     }
-    if (Array.isArray(list)
-      && list.some((entry, index) => index > 0 && list[index - 1]! > entry)) {
-      throw new TypeError(`${listPath} must be lexicographically sorted`);
+    if (Array.isArray(list)) {
+      const sortedList = [...list].sort();
+      if (list.some((entry, index) => entry !== sortedList[index])) {
+        throw new TypeError(`${listPath} must be lexicographically sorted`);
+      }
     }
   }
   const covered = [...((web as string[] | undefined) ?? []), ...((http as string[] | undefined) ?? [])];
@@ -241,7 +243,8 @@ const responseBlockClasses = (value: unknown, path: string): string[] | undefine
   if (classes.some((entry) => !RESPONSE_CLASSES.has(entry))) {
     throw new TypeError(`${path} contains an unknown response class`);
   }
-  if (classes.some((entry, index) => index > 0 && classes[index - 1]! > entry)) {
+  const sortedClasses = [...classes].sort();
+  if (classes.some((entry, index) => entry !== sortedClasses[index])) {
     throw new TypeError(`${path} must be lexicographically sorted`);
   }
   return classes;

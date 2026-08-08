@@ -92,9 +92,10 @@ const FORMAT_1_DIGEST = "dd07aff020e1d03e08501105dc53bb6943ffbdb50629cac7c7b4b03
 const FORMAT_1_CATALOG_DIGEST = "3f77896cf5a15475c0e9847201ffaa41f4b117b4d8e5051d035f982f55d3098d";
 const FORMAT_1_POLICY_HASH = "3".repeat(64);
 
-const compileSharedFormat1Vector = (index: number) => compileResponsePolicyFormat1(
-  parsePolicyMarkdown(responsePolicyFormat1Fixture.positive[index]!.markdown),
-  {
+const compileSharedFormat1Vector = (index: number) => {
+  const vector = responsePolicyFormat1Fixture.positive[index];
+  if (vector === undefined) throw new Error(`missing shared format 1 vector at index ${index}`);
+  return compileResponsePolicyFormat1(parsePolicyMarkdown(vector.markdown), {
     issuer: "https://sign.sigil.example",
     keyId: "sign-key-1",
     tenantId: "tenant-1",
@@ -105,8 +106,8 @@ const compileSharedFormat1Vector = (index: number) => compileResponsePolicyForma
     revocationEpoch: 7,
     deterministicRulesetDigest: FORMAT_1_DIGEST,
     classCatalogDigest: FORMAT_1_CATALOG_DIGEST,
-  },
-);
+  });
+};
 
 const defineSharedResponsePolicyFormat1Tests = (runtime: string, adapter: CryptoAdapter): void => {
   for (const vector of responsePolicyFormat1Fixture.positive) {

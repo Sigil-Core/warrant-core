@@ -82,6 +82,11 @@ describe("Phase 1 authoring core", () => {
       "## custom",
       "response.deny_string: \"ignore previous instructions\"",
     ].join("\n"));
+    const responseRule = valid.custom?.rules[0];
+    const validResponse = valid.mcp?.response;
+    if (responseRule === undefined || validResponse === undefined) {
+      throw new Error("valid response-policy fixture did not parse as expected");
+    }
     expect(() => serializePolicyMarkdown({ ...valid, version: "2.1.0" }))
       .toThrow("requires Policy 2.2.x");
     expect(() => serializePolicyMarkdown({
@@ -102,7 +107,7 @@ describe("Phase 1 authoring core", () => {
     })).toThrow("at least one of allowedServers, allowedTools, or blockedTools");
     expect(() => serializePolicyMarkdown({
       ...valid,
-      custom: { rules: [valid.custom!.rules[0]!, valid.custom!.rules[0]!] },
+      custom: { rules: [responseRule, responseRule] },
     })).toThrow("Duplicate response.deny_string literal");
     for (const blockClasses of [
       [],
@@ -114,7 +119,7 @@ describe("Phase 1 authoring core", () => {
         ...valid,
         mcp: {
           ...valid.mcp,
-          response: { ...valid.mcp!.response, blockClasses: blockClasses as never },
+          response: { ...validResponse, blockClasses: blockClasses as never },
         },
       })).toThrow(/response class|lexicographically sorted/);
     }
