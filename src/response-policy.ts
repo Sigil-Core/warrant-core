@@ -1,4 +1,5 @@
 import { canonicalizePgCommitV1 } from "./commitment.js";
+import { validateCustomRules } from "./custom-rules.js";
 import { assertMcpResponseExactKeys, mcpResponseCoverageProblem } from "./policy.js";
 import type {
   CompiledResponsePolicyBounds,
@@ -229,8 +230,8 @@ export function compileResponsePolicyFormat1(
     deterministicRuleset: response.deterministicRuleset,
   });
   if (coverageProblem) throw new TypeError(coverageProblem);
-  const denyStrings = (policy.custom?.rules ?? [])
-    .filter((rule) => isRecord(rule) && rule.type === "response_deny_string")
+  const denyStrings = validateCustomRules(policy.custom)
+    .filter((rule) => rule.type === "response_deny_string")
     .map((rule) => requireString(rule.value, "custom.response.deny_string"))
     .sort();
   if (new Set(denyStrings).size !== denyStrings.length) {

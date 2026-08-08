@@ -1,6 +1,7 @@
 import type { ParsedPolicy } from "./types.js";
 import { policyVersionRange } from "./capabilities.js";
 import { assertMcpResponseExactKeys, mcpResponseCoverageProblem } from "./policy.js";
+import { validateCustomRules, type ValidatedCustomRule } from "./custom-rules.js";
 
 type RecordValue = Record<string, unknown>;
 
@@ -174,13 +175,12 @@ const softLimitsSection = (value: unknown): string | undefined => {
 };
 
 // skipcq: JS-R1005 - Custom-rule variants have distinct wire syntax and remain in one canonical emitter.
-const customSection = (value: unknown): string | undefined => {
+const customSection = (value: unknown, rules: ValidatedCustomRule[]): string | undefined => {
   if (value === undefined) return undefined;
-  if (!isRecord(value) || !Array.isArray(value.rules)) throw new TypeError("custom.rules must be an array");
+  if (!isRecord(value)) throw new TypeError("custom must be an object");
   const lines: string[] = [];
   const responseDenyStrings = new Set<string>();
-  for (const rule of value.rules) {
-    if (!isRecord(rule) || typeof rule.type !== "string") throw new TypeError("custom rule must be an object with a type");
+  for (const rule of rules) {
     if (rule.type === "allow_field") {
       const action = typeof rule.actionScope === "string" ? `[action=${rule.actionScope}]` : "";
       const attested = rule.attested === true ? " attested" : "";
@@ -250,11 +250,10 @@ const responseBlockClasses = (value: unknown, path: string): string[] | undefine
   return classes;
 };
 
-const assertResponsePolicySerialization = (policy: ParsedPolicy): void => {
+const assertResponsePolicySerialization = (policy: ParsedPolicy, customRules: ValidatedCustomRule[]): void => {
   const mcp = policy.mcp;
   const response = isRecord(mcp) && isRecord(mcp.response) ? mcp.response : undefined;
-  const responseRules = (policy.custom?.rules ?? [])
-    .filter((rule) => isRecord(rule) && rule.type === "response_deny_string");
+  const responseRules = customRules.filter((rule) => rule.type === "response_deny_string");
   if (response === undefined && responseRules.length === 0) return;
   if (response !== undefined) assertMcpResponseExactKeys(response);
   if (!/^2\.2\.\d+$/.test(policy.version)) {
@@ -310,11 +309,12 @@ export const serializePolicyMarkdown = (policy: ParsedPolicy): string => {
   if (policyVersionRange(policy.version) === undefined) {
     throw new TypeError(`Policy version ${policy.version} is newer than this engine`);
   }
-  assertResponsePolicySerialization(policy);
+  const customRules = validateCustomRules(policy.custom);
+  assertResponsePolicySerialization(policy, customRules);
   const sections = [
     resourceSection("repository", policy.repository), resourceSection("filesystem", policy.filesystem),
     resourceSection("git", policy.git), resourceSection("database", policy.database), evmSection(policy.evm),
-    toolCallsSection(policy.tool_calls), customSection(policy.custom),
+    toolCallsSection(policy.tool_calls), customSection(policy.custom, customRules),
     mcpSection(policy.mcp),
     softLimitsSection(policy.soft_limits),
     serializeSimpleSection("execution_limits", policy.execution_limits, [["max_tool_calls_per_task", "maxToolCallsPerTask", false], ["max_tool_calls_per_hour", "maxToolCallsPerHour", false], ["max_model_spend_usd_per_task", "maxModelSpendUsdPerTask", false], ["max_model_tokens_per_task", "maxModelTokensPerTask", false]]),

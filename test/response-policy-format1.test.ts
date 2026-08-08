@@ -276,6 +276,47 @@ describe("CompiledResponsePolicy format 1", () => {
     }, COMPILE_INPUT)).toThrow("Compiled response policy payload exceeds 65536 bytes");
   });
 
+  it("validates every direct custom rule before selecting response denials", () => {
+    const base = parsePolicyMarkdown(
+      "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1",
+    );
+    const compileRules = (rules: unknown[]) => compileResponsePolicyFormat1({
+      ...base,
+      custom: { rules: rules as Array<Record<string, unknown>> },
+    }, COMPILE_INPUT);
+
+    expect(() => compileRules([
+      { name: "misspelled", type: "response_deny_strings", value: "secret" },
+    ])).toThrow("Unsupported custom rule type response_deny_strings");
+    expect(() => compileRules(["response_deny_string"]))
+      .toThrow("custom.rules[0] must be an object");
+    expect(() => compileRules([
+      { name: "malformed", type: "field", fieldPath: "note", value: "secret" },
+    ])).toThrow("custom.rules[0] is missing required field operator");
+    expect(() => compileRules([
+      { name: "extra", type: "deny_string", value: "secret", unsupported: true },
+    ])).toThrow("custom.rules[0] contains unknown field unsupported");
+
+    const inheritedType = Object.assign(
+      Object.create({ type: "response_deny_string" }) as Record<string, unknown>,
+      { name: "inherited-type", value: "secret" },
+    );
+    expect(() => compileRules([inheritedType]))
+      .toThrow("custom.rules[0] field type must be an own property");
+    const inheritedValue = Object.assign(
+      Object.create({ value: "secret" }) as Record<string, unknown>,
+      { name: "inherited-value", type: "response_deny_string" },
+    );
+    expect(() => compileRules([inheritedValue]))
+      .toThrow("custom.rules[0] field value must be an own property");
+
+    const compiled = compileRules([
+      { name: "request-only", type: "deny_string", value: "request secret" },
+      { name: "response-only", type: "response_deny_string", value: "response secret" },
+    ]);
+    expect(compiled.policy.denyStrings).toEqual(["response secret"]);
+  });
+
   it("rejects non-literal compiled coverage across validation and signed verification", async () => {
     const compiled = compiledFixture();
     const adapter = createNodeCryptoAdapter();
