@@ -724,6 +724,9 @@ const MCP_RESPONSE_KEYS = new Set([
 export const assertMcpResponseExactKeys = (response: Record<string, unknown>): void => {
   const unknownKey = Object.keys(response).find((key) => !MCP_RESPONSE_KEYS.has(key));
   if (unknownKey !== undefined) throw new TypeError(`mcp.response contains unknown field ${unknownKey}`);
+  const inheritedKey = [...MCP_RESPONSE_KEYS]
+    .find((key) => key in response && !Object.prototype.hasOwnProperty.call(response, key));
+  if (inheritedKey !== undefined) throw new TypeError(`mcp.response field ${inheritedKey} must be an own property`);
 };
 
 export function assertMcpToolLists(mcp: Record<string, unknown>): void {

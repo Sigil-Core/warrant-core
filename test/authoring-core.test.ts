@@ -97,6 +97,14 @@ describe("Phase 1 authoring core", () => {
         },
       })).toThrow(`mcp.response contains unknown field ${unknownKey}`);
     }
+    const inheritedResponse = Object.assign(
+      Object.create({ webFetchTools: ["fetch.server.fetch"] }) as Record<string, unknown>,
+      { deterministicRuleset: "sof-response-rules-v1" },
+    );
+    expect(() => serializePolicyMarkdown({
+      ...valid,
+      mcp: { ...valid.mcp, response: inheritedResponse },
+    })).toThrow("mcp.response field webFetchTools must be an own property");
     expect(() => serializePolicyMarkdown({
       ...valid,
       mcp: { ...valid.mcp, allowedTools: "prefixfetch.server.fetchsuffix" as never },

@@ -73,6 +73,33 @@ describe("CompiledResponsePolicy format 1", () => {
         },
       }, COMPILE_INPUT)).toThrow(`mcp.response contains unknown field ${unknownKey}`);
     }
+    const inheritedResponses = [
+      Object.assign(
+        Object.create({ webFetchTools: ["fetch.server.fetch"] }) as Record<string, unknown>,
+        { deterministicRuleset: "sof-response-rules-v1" },
+      ),
+      Object.assign(
+        Object.create({ httpTools: ["fetch.server.fetch"] }) as Record<string, unknown>,
+        { deterministicRuleset: "sof-response-rules-v1" },
+      ),
+      Object.assign(
+        Object.create({ deterministicRuleset: "sof-response-rules-v1" }) as Record<string, unknown>,
+        { webFetchTools: ["fetch.server.fetch"] },
+      ),
+      Object.assign(
+        Object.create({ blockClasses: ["secret"] }) as Record<string, unknown>,
+        {
+          webFetchTools: ["fetch.server.fetch"],
+          deterministicRuleset: "sof-response-rules-v1",
+        },
+      ),
+    ];
+    for (const response of inheritedResponses) {
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: { ...source.mcp, response },
+      }, COMPILE_INPUT)).toThrow(/mcp\.response field \w+ must be an own property/);
+    }
     const invalidToolLists: unknown[] = [
       "prefixfetch.server.fetchsuffix",
       [],
