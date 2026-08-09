@@ -57,9 +57,17 @@
     },
     {
       "id": "newer-2-minor",
-      "outcome": "reject",
+      "outcome": "accept",
       "markdown": "version: 2.2.0\n\n## tool_calls\nallowed: bash",
-      "error": "newer than this engine"
+      "canonicalPolicy": {
+        "version": "2.2.0",
+        "tool_calls": {
+          "allowed": [
+            "bash"
+          ]
+        }
+      },
+      "canonicalPolicySha256": "7564e9cc5cf16c2647bb715bf46fa003ff41396f6ca4803a9aa4fe18def0dde7"
     },
     {
       "id": "newer-major",

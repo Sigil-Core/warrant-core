@@ -6,3 +6,4 @@ export * from "./signature.js";
 export * from "./capabilities.js";
 export * from "./serializer.js";
 export * from "./validation.js";
+export * from "./response-policy.js";

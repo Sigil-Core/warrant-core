@@ -15,6 +15,95 @@ export interface ParsedPolicy {
   database?: Record<string, unknown>;
 }
 
+export type ResponsePolicyClass =
+  | "malicious_url"
+  | "pii"
+  | "prompt_injection"
+  | "secret";
+
+export interface ParsedMcpResponsePolicy {
+  webFetchTools?: string[];
+  httpTools?: string[];
+  deterministicRuleset: "sof-response-rules-v1";
+  blockClasses?: ResponsePolicyClass[];
+}
+
+export interface CompiledResponsePolicyBounds {
+  maxProjectionBytes: 16777216;
+  maxNestingDepth: 16;
+  maxFindings: 256;
+  maxScannerResponseBytes: 1048576;
+  scannerDeadlineMs: 2000;
+  maxEnvelopeLifetimeSeconds: 300;
+  clockSkewSeconds: 30;
+  maxObserveWindowSeconds: 2592000;
+}
+
+export interface CompiledResponsePolicyFormat1Policy {
+  deterministicRuleset: "sof-response-rules-v1";
+  webFetchTools?: string[];
+  httpTools?: string[];
+  blockClasses?: ResponsePolicyClass[];
+  denyStrings?: string[];
+}
+
+export interface CompiledResponsePolicyFormat1 {
+  kind: "CompiledResponsePolicy";
+  formatVersion: 1;
+  issuer: string;
+  keyId: string;
+  audience: "sigil-agent-hooks";
+  scope: "mcp:result-inspect";
+  tenantId: string;
+  taskId: string;
+  policyVersion: string;
+  policyHash: string;
+  issuedAt: number;
+  expiresAt: number;
+  revocationEpoch: number;
+  coveredTools: string[];
+  deterministicRuleset: {
+    id: "sof-response-rules-v1";
+    digest: string;
+  };
+  classCatalog: {
+    id: "sof-response-classes-v1";
+    digest: string;
+  };
+  bounds: CompiledResponsePolicyBounds;
+  policy: CompiledResponsePolicyFormat1Policy;
+}
+
+export interface CompiledResponsePolicyFormat1Input {
+  issuer: string;
+  keyId: string;
+  tenantId: string;
+  taskId: string;
+  policyHash: string;
+  issuedAt: number;
+  expiresAt: number;
+  revocationEpoch: number;
+  deterministicRulesetDigest: string;
+  classCatalogDigest: string;
+}
+
+export interface CompiledResponsePolicyVerificationContext {
+  publicKey: Uint8Array;
+  issuer: string;
+  keyId: string;
+  tenantId: string;
+  taskId: string;
+  policyHash: string;
+  revocationEpoch: number;
+  deterministicRulesetDigest: string;
+  classCatalogDigest: string;
+  now: number;
+}
+
+export interface VerifiedCompiledResponsePolicyFormat1 extends CompiledResponsePolicyFormat1 {
+  compiledPolicyDigest: string;
+}
+
 export interface CryptoAdapter {
   sha256(data: Uint8Array): Promise<Uint8Array>;
   signEd25519?(privateKeyPkcs8: Uint8Array, data: Uint8Array): Promise<Uint8Array>;

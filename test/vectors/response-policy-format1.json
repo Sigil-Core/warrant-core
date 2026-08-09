@@ -1,0 +1,197 @@
+{
+  "compiledFormat1": {
+    "canonicalJson": "{\"audience\":\"sigil-agent-hooks\",\"bounds\":{\"clockSkewSeconds\":30,\"maxEnvelopeLifetimeSeconds\":300,\"maxFindings\":256,\"maxNestingDepth\":16,\"maxObserveWindowSeconds\":2592000,\"maxProjectionBytes\":16777216,\"maxScannerResponseBytes\":1048576,\"scannerDeadlineMs\":2000},\"classCatalog\":{\"digest\":\"3f77896cf5a15475c0e9847201ffaa41f4b117b4d8e5051d035f982f55d3098d\",\"id\":\"sof-response-classes-v1\"},\"coveredTools\":[\"a.server.fetch\",\"z.server.open\"],\"deterministicRuleset\":{\"digest\":\"dd07aff020e1d03e08501105dc53bb6943ffbdb50629cac7c7b4b03d1bd7ce46\",\"id\":\"sof-response-rules-v1\"},\"expiresAt\":1800000300,\"formatVersion\":1,\"issuedAt\":1800000000,\"issuer\":\"https://sign.sigil.example\",\"keyId\":\"sign-key-1\",\"kind\":\"CompiledResponsePolicy\",\"policy\":{\"blockClasses\":[\"malicious_url\",\"secret\"],\"deterministicRuleset\":\"sof-response-rules-v1\",\"httpTools\":[\"z.server.open\"],\"webFetchTools\":[\"a.server.fetch\"]},\"policyHash\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"policyVersion\":\"2.2.0\",\"revocationEpoch\":7,\"scope\":\"mcp:result-inspect\",\"taskId\":\"task-1\",\"tenantId\":\"tenant-1\"}",
+    "sha256": "11847e61ab9a7488f40a28530968711d9b20ebcdf42fa62342cf91a168993335"
+  },
+  "compiledDenyFormat1": {
+    "canonicalJson": "{\"audience\":\"sigil-agent-hooks\",\"bounds\":{\"clockSkewSeconds\":30,\"maxEnvelopeLifetimeSeconds\":300,\"maxFindings\":256,\"maxNestingDepth\":16,\"maxObserveWindowSeconds\":2592000,\"maxProjectionBytes\":16777216,\"maxScannerResponseBytes\":1048576,\"scannerDeadlineMs\":2000},\"classCatalog\":{\"digest\":\"3f77896cf5a15475c0e9847201ffaa41f4b117b4d8e5051d035f982f55d3098d\",\"id\":\"sof-response-classes-v1\"},\"coveredTools\":[\"fetch.server.fetch\"],\"deterministicRuleset\":{\"digest\":\"dd07aff020e1d03e08501105dc53bb6943ffbdb50629cac7c7b4b03d1bd7ce46\",\"id\":\"sof-response-rules-v1\"},\"expiresAt\":1800000300,\"formatVersion\":1,\"issuedAt\":1800000000,\"issuer\":\"https://sign.sigil.example\",\"keyId\":\"sign-key-1\",\"kind\":\"CompiledResponsePolicy\",\"policy\":{\"denyStrings\":[\"ignore previous instructions\",\"token:\\\\t\"],\"deterministicRuleset\":\"sof-response-rules-v1\",\"webFetchTools\":[\"fetch.server.fetch\"]},\"policyHash\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"policyVersion\":\"2.2.0\",\"revocationEpoch\":7,\"scope\":\"mcp:result-inspect\",\"taskId\":\"task-1\",\"tenantId\":\"tenant-1\"}",
+    "sha256": "b3e550b0a766981ba71640d7b77b84f628dc38f251a7d17935c7e491b50a7c64"
+  },
+  "jwsFormat1": {
+    "privateKeyPkcs8Base64url": "MC4CAQAwBQYDK2VwBCIEIMH8dHLPxVMdy32BTSw30tXWbqlL2ILzZ79GR4dEq38D",
+    "publicKeySpkiBase64url": "MCowBQYDK2VwAyEA3MbOmN4swDGZkQ-jYiOvbkoMDTpETKfGwEP7jwYyP-o",
+    "protectedHeaderCanonicalJson": "{\"alg\":\"EdDSA\",\"kid\":\"sign-key-1\",\"typ\":\"sof-compiled-response-policy+jws\"}",
+    "compactJws": "eyJhbGciOiJFZERTQSIsImtpZCI6InNpZ24ta2V5LTEiLCJ0eXAiOiJzb2YtY29tcGlsZWQtcmVzcG9uc2UtcG9saWN5K2p3cyJ9.eyJhdWRpZW5jZSI6InNpZ2lsLWFnZW50LWhvb2tzIiwiYm91bmRzIjp7ImNsb2NrU2tld1NlY29uZHMiOjMwLCJtYXhFbnZlbG9wZUxpZmV0aW1lU2Vjb25kcyI6MzAwLCJtYXhGaW5kaW5ncyI6MjU2LCJtYXhOZXN0aW5nRGVwdGgiOjE2LCJtYXhPYnNlcnZlV2luZG93U2Vjb25kcyI6MjU5MjAwMCwibWF4UHJvamVjdGlvbkJ5dGVzIjoxNjc3NzIxNiwibWF4U2Nhbm5lclJlc3BvbnNlQnl0ZXMiOjEwNDg1NzYsInNjYW5uZXJEZWFkbGluZU1zIjoyMDAwfSwiY2xhc3NDYXRhbG9nIjp7ImRpZ2VzdCI6IjNmNzc4OTZjZjVhMTU0NzVjMGU5ODQ3MjAxZmZhYTQxZjRiMTE3YjRkOGU1MDUxZDAzNWY5ODJmNTVkMzA5OGQiLCJpZCI6InNvZi1yZXNwb25zZS1jbGFzc2VzLXYxIn0sImNvdmVyZWRUb29scyI6WyJhLnNlcnZlci5mZXRjaCIsInouc2VydmVyLm9wZW4iXSwiZGV0ZXJtaW5pc3RpY1J1bGVzZXQiOnsiZGlnZXN0IjoiZGQwN2FmZjAyMGUxZDAzZTA4NTAxMTA1ZGM1M2JiNjk0M2ZmYmRiNTA2MjljYWM3YzdiNGIwM2QxYmQ3Y2U0NiIsImlkIjoic29mLXJlc3BvbnNlLXJ1bGVzLXYxIn0sImV4cGlyZXNBdCI6MTgwMDAwMDMwMCwiZm9ybWF0VmVyc2lvbiI6MSwiaXNzdWVkQXQiOjE4MDAwMDAwMDAsImlzc3VlciI6Imh0dHBzOi8vc2lnbi5zaWdpbC5leGFtcGxlIiwia2V5SWQiOiJzaWduLWtleS0xIiwia2luZCI6IkNvbXBpbGVkUmVzcG9uc2VQb2xpY3kiLCJwb2xpY3kiOnsiYmxvY2tDbGFzc2VzIjpbIm1hbGljaW91c191cmwiLCJzZWNyZXQiXSwiZGV0ZXJtaW5pc3RpY1J1bGVzZXQiOiJzb2YtcmVzcG9uc2UtcnVsZXMtdjEiLCJodHRwVG9vbHMiOlsiei5zZXJ2ZXIub3BlbiJdLCJ3ZWJGZXRjaFRvb2xzIjpbImEuc2VydmVyLmZldGNoIl19LCJwb2xpY3lIYXNoIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyIsInBvbGljeVZlcnNpb24iOiIyLjIuMCIsInJldm9jYXRpb25FcG9jaCI6Nywic2NvcGUiOiJtY3A6cmVzdWx0LWluc3BlY3QiLCJ0YXNrSWQiOiJ0YXNrLTEiLCJ0ZW5hbnRJZCI6InRlbmFudC0xIn0.gn_tdEDOUq66_HjRfmrjTQ8radeBb4CI19YoDaWMzTojQSK92EXSRTPiTIzOxyxji41-n_m0XQ3HUcsjbv9lDg",
+    "expectedCompiledPolicyDigest": "11847e61ab9a7488f40a28530968711d9b20ebcdf42fa62342cf91a168993335",
+    "invalid": {
+      "signatureCompactJws": "eyJhbGciOiJFZERTQSIsImtpZCI6InNpZ24ta2V5LTEiLCJ0eXAiOiJzb2YtY29tcGlsZWQtcmVzcG9uc2UtcG9saWN5K2p3cyJ9.eyJhdWRpZW5jZSI6InNpZ2lsLWFnZW50LWhvb2tzIiwiYm91bmRzIjp7ImNsb2NrU2tld1NlY29uZHMiOjMwLCJtYXhFbnZlbG9wZUxpZmV0aW1lU2Vjb25kcyI6MzAwLCJtYXhGaW5kaW5ncyI6MjU2LCJtYXhOZXN0aW5nRGVwdGgiOjE2LCJtYXhPYnNlcnZlV2luZG93U2Vjb25kcyI6MjU5MjAwMCwibWF4UHJvamVjdGlvbkJ5dGVzIjoxNjc3NzIxNiwibWF4U2Nhbm5lclJlc3BvbnNlQnl0ZXMiOjEwNDg1NzYsInNjYW5uZXJEZWFkbGluZU1zIjoyMDAwfSwiY2xhc3NDYXRhbG9nIjp7ImRpZ2VzdCI6IjNmNzc4OTZjZjVhMTU0NzVjMGU5ODQ3MjAxZmZhYTQxZjRiMTE3YjRkOGU1MDUxZDAzNWY5ODJmNTVkMzA5OGQiLCJpZCI6InNvZi1yZXNwb25zZS1jbGFzc2VzLXYxIn0sImNvdmVyZWRUb29scyI6WyJhLnNlcnZlci5mZXRjaCIsInouc2VydmVyLm9wZW4iXSwiZGV0ZXJtaW5pc3RpY1J1bGVzZXQiOnsiZGlnZXN0IjoiZGQwN2FmZjAyMGUxZDAzZTA4NTAxMTA1ZGM1M2JiNjk0M2ZmYmRiNTA2MjljYWM3YzdiNGIwM2QxYmQ3Y2U0NiIsImlkIjoic29mLXJlc3BvbnNlLXJ1bGVzLXYxIn0sImV4cGlyZXNBdCI6MTgwMDAwMDMwMCwiZm9ybWF0VmVyc2lvbiI6MSwiaXNzdWVkQXQiOjE4MDAwMDAwMDAsImlzc3VlciI6Imh0dHBzOi8vc2lnbi5zaWdpbC5leGFtcGxlIiwia2V5SWQiOiJzaWduLWtleS0xIiwia2luZCI6IkNvbXBpbGVkUmVzcG9uc2VQb2xpY3kiLCJwb2xpY3kiOnsiYmxvY2tDbGFzc2VzIjpbIm1hbGljaW91c191cmwiLCJzZWNyZXQiXSwiZGV0ZXJtaW5pc3RpY1J1bGVzZXQiOiJzb2YtcmVzcG9uc2UtcnVsZXMtdjEiLCJodHRwVG9vbHMiOlsiei5zZXJ2ZXIub3BlbiJdLCJ3ZWJGZXRjaFRvb2xzIjpbImEuc2VydmVyLmZldGNoIl19LCJwb2xpY3lIYXNoIjoiMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMyIsInBvbGljeVZlcnNpb24iOiIyLjIuMCIsInJldm9jYXRpb25FcG9jaCI6Nywic2NvcGUiOiJtY3A6cmVzdWx0LWluc3BlY3QiLCJ0YXNrSWQiOiJ0YXNrLTEiLCJ0ZW5hbnRJZCI6InRlbmFudC0xIn0.An_tdEDOUq66_HjRfmrjTQ8radeBb4CI19YoDaWMzTojQSK92EXSRTPiTIzOxyxji41-n_m0XQ3HUcsjbv9lDg",
+      "claimTaskId": "wrong-task",
+      "notYetValidNow": 1799999969,
+      "expiredNow": 1800000331
+    }
+  },
+  "positive": [
+    {
+      "id": "policy-2.2-web-minimal",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1",
+      "canonicalPolicy": {
+        "version": "2.2.0",
+        "mcp": {
+          "allowedTools": [
+            "fetch.server.fetch"
+          ],
+          "response": {
+            "webFetchTools": [
+              "fetch.server.fetch"
+            ],
+            "deterministicRuleset": "sof-response-rules-v1"
+          }
+        }
+      }
+    },
+    {
+      "id": "policy-2.2-http-dotted",
+      "markdown": "version: 2.2.1\n\n## mcp\nallowed_tools: https://api.example.com/mcp/v1/postgres.query.run\nresponse.http_tools: https://api.example.com/mcp/v1/postgres.query.run\nresponse.deterministic_ruleset: sof-response-rules-v1",
+      "canonicalPolicy": {
+        "version": "2.2.1",
+        "mcp": {
+          "allowedTools": [
+            "https://api.example.com/mcp/v1/postgres.query.run"
+          ],
+          "response": {
+            "httpTools": [
+              "https://api.example.com/mcp/v1/postgres.query.run"
+            ],
+            "deterministicRuleset": "sof-response-rules-v1"
+          }
+        }
+      }
+    },
+    {
+      "id": "policy-2.2-both-block-classes",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: z.server.open, a.server.fetch\nresponse.web_fetch_tools: a.server.fetch\nresponse.http_tools: z.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1\nresponse.block_classes: secret, malicious_url",
+      "canonicalPolicy": {
+        "version": "2.2.0",
+        "mcp": {
+          "allowedTools": [
+            "z.server.open",
+            "a.server.fetch"
+          ],
+          "response": {
+            "webFetchTools": [
+              "a.server.fetch"
+            ],
+            "httpTools": [
+              "z.server.open"
+            ],
+            "deterministicRuleset": "sof-response-rules-v1",
+            "blockClasses": [
+              "malicious_url",
+              "secret"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "policy-2.2-response-deny-literal",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1\n\n## custom\nresponse.deny_string: \"ignore previous instructions\"\nresponse.deny_string: \"token:\\\\t\"",
+      "canonicalPolicy": {
+        "version": "2.2.0",
+        "mcp": {
+          "allowedTools": [
+            "fetch.server.fetch"
+          ],
+          "response": {
+            "webFetchTools": [
+              "fetch.server.fetch"
+            ],
+            "deterministicRuleset": "sof-response-rules-v1"
+          }
+        },
+        "custom": {
+          "rules": [
+            {
+              "name": "response.deny_string:ignore previous instructions",
+              "type": "response_deny_string",
+              "value": "ignore previous instructions"
+            },
+            {
+              "name": "response.deny_string:token:\\t",
+              "type": "response_deny_string",
+              "value": "token:\\t"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "negative": [
+    {
+      "id": "policy-2.3-unsupported",
+      "markdown": "version: 2.3.0\n\n## mcp\nallowed_tools: fetch.server.fetch"
+    },
+    {
+      "id": "legacy-response-key",
+      "markdown": "version: 2.1.1\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "policy-22-release2-key",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1\nresponse.redact_classes: pii"
+    },
+    {
+      "id": "unknown-response-key",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1\nresponse.allow_classes: pii"
+    },
+    {
+      "id": "misplaced-coverage-key",
+      "markdown": "version: 2.2.0\n\n## tool_calls\nallowed: web_fetch\nresponse.web_fetch_tools: fetch.server.fetch"
+    },
+    {
+      "id": "empty-coverage-list",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: ,\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "wildcard-coverage",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.*\nresponse.web_fetch_tools: fetch.server.*\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "coverage-not-exact-allowed-member",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.*\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "coverage-blocked",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nblocked_tools: fetch.server.*\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "coverage-duplicate-within-list",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open, fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "coverage-duplicate-across-lists",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.http_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1"
+    },
+    {
+      "id": "coverage-without-ruleset",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open"
+    },
+    {
+      "id": "unknown-ruleset",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: custom-v1"
+    },
+    {
+      "id": "unknown-class",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1\nresponse.block_classes: malware"
+    },
+    {
+      "id": "duplicate-class",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1\nresponse.block_classes: secret, secret"
+    },
+    {
+      "id": "bare-response-literal",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1\n\n## custom\nresponse.deny_string: secret"
+    },
+    {
+      "id": "empty-response-literal",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1\n\n## custom\nresponse.deny_string: \"\""
+    },
+    {
+      "id": "duplicate-response-literal",
+      "markdown": "version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.open\nresponse.web_fetch_tools: fetch.server.open\nresponse.deterministic_ruleset: sof-response-rules-v1\n\n## custom\nresponse.deny_string: \"secret\"\nresponse.deny_string: \"secret\""
+    },
+    {
+      "id": "response-literal-without-coverage",
+      "markdown": "version: 2.2.0\n\n## custom\nresponse.deny_string: \"secret\""
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import type { ParsedPolicy } from "./types.js";
 export const AUTHORING_SURFACES = ["manual-form", "manual-advanced", "builder"] as const;
 export type AuthoringSurface = (typeof AUTHORING_SURFACES)[number];
 
-export const POLICY_VERSION_RANGES = ["0.x", "1.x", "2.0.x", "2.1.x"] as const;
+export const POLICY_VERSION_RANGES = ["0.x", "1.x", "2.0.x", "2.1.x", "2.2.x"] as const;
 export type PolicyVersionRange = (typeof POLICY_VERSION_RANGES)[number];
 
 /** The versioned, service-owned capability registry shared with Sigil Sign. */
@@ -27,7 +27,12 @@ export const DEPLOY_FEATURE_KEYS = [
   "tool_calls.http",
   "tool_calls.http.method_rules",
   "mcp",
+  "mcp.response.web_fetch_tools",
+  "mcp.response.http_tools",
+  "mcp.response.deterministic_ruleset",
+  "mcp.response.block_classes",
   "custom",
+  "custom.response.deny_string",
   "soft_limits",
   "soft_limits.cap",
   "execution_limits",
@@ -87,8 +92,9 @@ export interface ConstraintViolation {
 }
 
 const ALL_VERSIONS: readonly PolicyVersionRange[] = POLICY_VERSION_RANGES;
-const V2_VERSIONS: readonly PolicyVersionRange[] = ["2.0.x", "2.1.x"];
-const V21_VERSIONS: readonly PolicyVersionRange[] = ["2.1.x"];
+const V2_VERSIONS: readonly PolicyVersionRange[] = ["2.0.x", "2.1.x", "2.2.x"];
+const V21_VERSIONS: readonly PolicyVersionRange[] = ["2.1.x", "2.2.x"];
+const V22_VERSIONS: readonly PolicyVersionRange[] = ["2.2.x"];
 
 const full = (constraints: readonly RepresentabilityConstraint[] = []): SurfaceCapability => ({
   author: true,
@@ -288,10 +294,15 @@ const manifest = {
   "mcp.blocked_tools": entry(V2_VERSIONS, "mcp"),
   "mcp.require_approval": entry(V2_VERSIONS, "mcp"),
   "mcp.require_shim": entry(V2_VERSIONS, "mcp"),
+  "mcp.response.web_fetch_tools": entry(V22_VERSIONS, "mcp.response.web_fetch_tools"),
+  "mcp.response.http_tools": entry(V22_VERSIONS, "mcp.response.http_tools"),
+  "mcp.response.deterministic_ruleset": entry(V22_VERSIONS, "mcp.response.deterministic_ruleset"),
+  "mcp.response.block_classes": entry(V22_VERSIONS, "mcp.response.block_classes"),
 
   "custom.allow_only": entry(ALL_VERSIONS, "custom"),
   "custom.deny_if": entry(ALL_VERSIONS, "custom"),
   "custom.deny_string": entry(ALL_VERSIONS, "custom"),
+  "custom.response.deny_string": entry(V22_VERSIONS, "custom.response.deny_string"),
   "custom.require_approval": entry(V2_VERSIONS, "custom"),
   "custom.require_shim": entry(V2_VERSIONS, "custom"),
 
@@ -404,6 +415,10 @@ const outputKeyByPath: Readonly<Record<string, string>> = {
   "mcp.blocked_tools": "mcp.blockedTools",
   "mcp.require_approval": "mcp.requireApproval",
   "mcp.require_shim": "mcp.requireShim",
+  "mcp.response.web_fetch_tools": "mcp.response.webFetchTools",
+  "mcp.response.http_tools": "mcp.response.httpTools",
+  "mcp.response.deterministic_ruleset": "mcp.response.deterministicRuleset",
+  "mcp.response.block_classes": "mcp.response.blockClasses",
   "custom.require_approval": "custom.requireApproval",
   "custom.require_shim": "custom.requireShim",
   "soft_limits.daily_evm_limit_eth": "soft_limits.dailyEvmLimitEth",
@@ -514,6 +529,9 @@ export const capabilityValuesForPath = (
   if (path === "custom.deny_string") {
     return policy.custom?.rules.filter((rule) => rule.type === "deny_string") ?? [];
   }
+  if (path === "custom.response.deny_string") {
+    return policy.custom?.rules.filter((rule) => rule.type === "response_deny_string") ?? [];
+  }
   const value = directValue(policy, outputPathForCanonicalPath(path));
   return value === undefined ? [] : [value];
 };
@@ -528,6 +546,7 @@ export const policyVersionRange = (version: string): PolicyVersionRange | undefi
   if (major === 1) return "1.x";
   if (major === 2 && minor === 0) return "2.0.x";
   if (major === 2 && minor === 1) return "2.1.x";
+  if (major === 2 && minor === 2) return "2.2.x";
   return undefined;
 };
 
@@ -668,7 +687,7 @@ const PARSER_CONTRACT_TABLES = {
 export const PARSER_CONTRACT_DIGEST_INPUT = stableJson(PARSER_CONTRACT_TABLES);
 export const PARSER_CONTRACT_DIGEST_ALGORITHM = "sha256" as const;
 export const PARSER_CONTRACT_DIGEST =
-  "sha256:075e7cf5a02941f2c96565c324b56ae1a75b16b395c004dfd54882f13e0cb4be" as const;
+  "sha256:5bdc43e557e1a472c62778cbbbb4b11e8766268b2aff4e194eb8c67e0689d4b8" as const;
 
 export const deployFeatureKeysForPolicy = (policy: ParsedPolicy): readonly DeployFeatureKey[] => {
   const keys = new Set<DeployFeatureKey>();
