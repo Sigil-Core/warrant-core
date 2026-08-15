@@ -1,0 +1,102 @@
+# .coderabbit.yaml — warrant-core (TypeScript; platform-neutral parsing,
+# canonicalization, hashing, and signature primitives for Sigil Warrant)
+#
+# Auto-review is OFF (Vernon, July 21, 2026): code review happens locally
+# and passes BEFORE a PR is opened; automated PR reviewers are duplicative
+# and delay deployment. CodeRabbit remains available on-demand via
+# `@coderabbitai review` in a PR comment. No automated reviewer is a
+# required status check on this repository's default branch, for the same
+# reason.
+#
+# This repository is public and gitignores agents-global.md, so CodeRabbit
+# picks up house-rules context from the committed AGENTS.md instead.
+
+reviews:
+  auto_review:
+    enabled: false
+
+  path_instructions:
+    - path: "src/canonical.ts"
+      instructions: |
+        Canonicalization is consensus-critical. Any change to byte ordering,
+        whitespace handling, normalization, or field emission changes
+        policyHash for every existing Warrant and silently invalidates
+        signatures already in the field.
+        - Treat any behavioural change here as breaking until proven otherwise.
+        - Require a fixture proving byte-identical output for unchanged input.
+        - Verify parity with sigil-sign is re-derived, not assumed; see
+          scripts/verify-sigil-sign-parity.mjs.
+
+    - path: "src/crypto/**"
+      instructions: |
+        Signing and verification primitives. Security-critical.
+        - Verify Ed25519 operations are correct and constant-time where required.
+        - Flag any custom or hand-rolled crypto.
+        - Check that private key material is never logged, serialized, or
+          exposed in an error message or stack trace.
+        - Flag any change that makes a verification failure silent or
+          recoverable rather than fatal.
+
+    - path: "src/signature.ts"
+      instructions: |
+        - Verify the signing payload is the canonical form, never the raw input.
+        - Flag any change that widens what counts as a valid signature.
+
+    - path: "src/commitment.ts"
+      instructions: |
+        - Verify hash inputs are domain-separated and cannot collide across
+          Warrant versions.
+
+    - path: "src/policy.ts"
+      instructions: |
+        Policy parsing. This is a control surface, not ordinary application code.
+        - Flag any change that makes an unparseable or ambiguous policy parse
+          successfully. Parsing must fail closed.
+        - Verify new policy fields round-trip losslessly through canonical.ts
+          and the serializer.
+
+    - path: "src/validation.ts"
+      instructions: |
+        - Verify validation rejects by default and admits only what is
+          explicitly allowed.
+        - Flag any relaxed or removed check without a stated reason.
+
+    - path: "src/serializer.ts"
+      instructions: |
+        - Verify serialize and parse round-trip losslessly, including for
+          fields the current version does not understand.
+
+    - path: "src/types.ts"
+      instructions: |
+        - Flag any widened type that would let an invalid Warrant typecheck.
+
+    - path: "scripts/verify-sigil-sign-parity.mjs"
+      instructions: |
+        - This script is the guard against warrant-core and sigil-sign drifting
+          apart. Flag any change that weakens or narrows what it compares.
+
+    - path: "test/**"
+      instructions: |
+        - Verify tests cover malformed, truncated, wrong-version, and
+          wrong-signature inputs, not just the happy path.
+        - Flag any test that stubs out canonicalization, hashing, or signature
+          verification.
+        - Canonicalization changes require a byte-level fixture, not a
+          paraphrased assertion.
+
+    - path: "package.json"
+      instructions: |
+        - Confirm version follows semver. A canonicalization or signature
+          change is a major bump.
+        - Flag any new runtime dependency in a library whose whole value is
+          being platform-neutral and auditable.
+
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!**/*.lock"
+
+# Sigil house rules reach this repository through the committed AGENTS.md,
+# which CodeRabbit discovers by default. agents-global.md is deliberately
+# gitignored here because the repository is public and that file carries
+# internal infrastructure topology and secret-store paths.

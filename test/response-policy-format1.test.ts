@@ -141,12 +141,11 @@ describe("CompiledResponsePolicy format 1", () => {
 
     for (const key of ["webFetchTools", "httpTools", "blockClasses", "denyStrings"] as const) {
       const ownPolicy = { ...compiled.policy };
-      const inheritedValue = ownPolicy[key];
+      const { [key]: inheritedValue, ...ownWithoutKey } = ownPolicy;
       if (inheritedValue === undefined) continue;
-      delete ownPolicy[key];
       const inheritedPolicy = Object.assign(
         Object.create({ [key]: inheritedValue }) as Record<string, unknown>,
-        ownPolicy,
+        ownWithoutKey,
       );
       expect(() => validateCompiledResponsePolicyFormat1({
         ...compiled,
