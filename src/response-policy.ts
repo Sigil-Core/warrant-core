@@ -70,6 +70,12 @@ const requireExactKeys = (
   if (missing.length > 0) throw new TypeError(`${path} is missing required field ${missing[0]}`);
   const inherited = optional.find((key) => key in value && !Object.hasOwn(value, key));
   if (inherited !== undefined) throw new TypeError(`${path} field ${inherited} must be an own property`);
+  const explicitlyUndefined = optional.find(
+    (key) => Object.hasOwn(value, key) && value[key] === undefined,
+  );
+  if (explicitlyUndefined !== undefined) {
+    throw new TypeError(`${path} field ${explicitlyUndefined} must not be undefined`);
+  }
 };
 
 const requireString = (value: unknown, path: string): string => {
@@ -210,9 +216,15 @@ const responseFromPolicy = (policy: ParsedPolicy): Record<string, unknown> => {
   if ("response" in mcp && !Object.hasOwn(mcp, "response")) {
     throw new TypeError("mcp field response must be an own property");
   }
-  if (!isRecord(mcp.response)) throw new TypeError("Policy 2.2.x AST does not declare MCP response coverage");
-  assertMcpResponseExactKeys(mcp.response);
-  return mcp.response;
+  const response = mcp.response;
+  if (!isRecord(response)) throw new TypeError("Policy 2.2.x AST does not declare MCP response coverage");
+  assertMcpResponseExactKeys(response);
+  const explicitlyUndefined = ["webFetchTools", "httpTools", "blockClasses"]
+    .find((key) => Object.hasOwn(response, key) && response[key] === undefined);
+  if (explicitlyUndefined !== undefined) {
+    throw new TypeError(`mcp.response field ${explicitlyUndefined} must not be undefined`);
+  }
+  return response;
 };
 
 export function compileResponsePolicyFormat1(

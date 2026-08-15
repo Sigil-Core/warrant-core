@@ -156,6 +156,21 @@ describe("CompiledResponsePolicy format 1", () => {
         policy: { ...compiled.policy },
       })).not.toThrow();
     }
+    for (const key of ["webFetchTools", "httpTools", "blockClasses", "denyStrings"] as const) {
+      expect(() => validateCompiledResponsePolicyFormat1({
+        ...compiled,
+        policy: { ...compiled.policy, [key]: undefined },
+      })).toThrow(`policy field ${key} must not be undefined`);
+    }
+    for (const key of ["webFetchTools", "httpTools", "blockClasses"] as const) {
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: {
+          ...source.mcp,
+          response: { ...source.mcp?.response, [key]: undefined },
+        },
+      }, COMPILE_INPUT)).toThrow(`mcp.response field ${key} must not be undefined`);
+    }
     const invalidToolLists: unknown[] = [
       "prefixfetch.server.fetchsuffix",
       [],
