@@ -21,6 +21,7 @@ import {
   signedEnvelopeParse,
   splitSignatureBlock,
   unsignedSigningPayload,
+  validateCompiledResponsePolicyFormat1,
   verifyCompiledResponsePolicyFormat1,
   WarrantEnvelopeError,
 } from "../../src/index.js";
@@ -92,22 +93,26 @@ const defineSharedMcpToolOverlapTests = (runtime: string): void => {
 const FORMAT_1_DIGEST = "dd07aff020e1d03e08501105dc53bb6943ffbdb50629cac7c7b4b03d1bd7ce46";
 const FORMAT_1_CATALOG_DIGEST = "3f77896cf5a15475c0e9847201ffaa41f4b117b4d8e5051d035f982f55d3098d";
 const FORMAT_1_POLICY_HASH = "3".repeat(64);
+const SHARED_FORMAT_1_COMPILE_INPUT = {
+  issuer: "https://sign.sigil.example",
+  keyId: "sign-key-1",
+  tenantId: "tenant-1",
+  taskId: "task-1",
+  policyHash: FORMAT_1_POLICY_HASH,
+  issuedAt: 1_800_000_000,
+  expiresAt: 1_800_000_300,
+  revocationEpoch: 7,
+  deterministicRulesetDigest: FORMAT_1_DIGEST,
+  classCatalogDigest: FORMAT_1_CATALOG_DIGEST,
+};
 
 const compileSharedFormat1Vector = (index: number) => {
   const vector = responsePolicyFormat1Fixture.positive[index];
   if (vector === undefined) throw new Error(`missing shared format 1 vector at index ${index}`);
-  return compileResponsePolicyFormat1(parsePolicyMarkdown(vector.markdown), {
-    issuer: "https://sign.sigil.example",
-    keyId: "sign-key-1",
-    tenantId: "tenant-1",
-    taskId: "task-1",
-    policyHash: FORMAT_1_POLICY_HASH,
-    issuedAt: 1_800_000_000,
-    expiresAt: 1_800_000_300,
-    revocationEpoch: 7,
-    deterministicRulesetDigest: FORMAT_1_DIGEST,
-    classCatalogDigest: FORMAT_1_CATALOG_DIGEST,
-  });
+  return compileResponsePolicyFormat1(
+    parsePolicyMarkdown(vector.markdown),
+    SHARED_FORMAT_1_COMPILE_INPUT,
+  );
 };
 
 const defineSharedResponsePolicyFormat1Tests = (runtime: string, adapter: CryptoAdapter): void => {
@@ -145,6 +150,83 @@ const defineSharedResponsePolicyFormat1Tests = (runtime: string, adapter: Crypto
     await expect(hashCompiledResponsePolicyFormat1(adapter, compiled)).resolves.toBe(
       responsePolicyFormat1Fixture.compiledDenyFormat1.sha256,
     );
+  });
+  it(`rejects inherited and explicit-undefined response policy fields in ${runtime}`, () => {
+    const source = parsePolicyMarkdown("version: 2.2.0\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1");
+    const inheritedResponses = [
+      Object.assign(Object.create({ webFetchTools: ["fetch.server.fetch"] }) as Record<string, unknown>, { deterministicRuleset: "sof-response-rules-v1" }),
+      Object.assign(Object.create({ httpTools: ["fetch.server.fetch"] }) as Record<string, unknown>, { deterministicRuleset: "sof-response-rules-v1" }),
+      Object.assign(Object.create({ deterministicRuleset: "sof-response-rules-v1" }) as Record<string, unknown>, { webFetchTools: ["fetch.server.fetch"] }),
+      Object.assign(Object.create({ blockClasses: ["secret"] }) as Record<string, unknown>, { webFetchTools: ["fetch.server.fetch"], deterministicRuleset: "sof-response-rules-v1" }),
+    ];
+    for (const response of inheritedResponses) {
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: { ...source.mcp, response },
+      }, SHARED_FORMAT_1_COMPILE_INPUT)).toThrow(/mcp\.response field \w+ must be an own property/);
+    }
+
+    const inheritedMcp = Object.assign(
+      Object.create({ mcp: source.mcp }) as Record<string, unknown>,
+      { version: source.version },
+    );
+    expect(() => compileResponsePolicyFormat1(
+      inheritedMcp as typeof source,
+      SHARED_FORMAT_1_COMPILE_INPUT,
+    )).toThrow("Policy 2.2.x AST field mcp must be an own property");
+
+    const inheritedResponseContainer = Object.assign(
+      Object.create({ response: source.mcp?.response }) as Record<string, unknown>,
+      { allowedTools: source.mcp?.allowedTools },
+    );
+    expect(() => compileResponsePolicyFormat1(
+      { ...source, mcp: inheritedResponseContainer },
+      SHARED_FORMAT_1_COMPILE_INPUT,
+    )).toThrow("mcp field response must be an own property");
+
+    for (const key of ["allowedTools", "blockedTools"] as const) {
+      const ownMcp = { ...source.mcp, allowedTools: ["fetch.server.fetch"], blockedTools: ["blocked.*"] };
+      const { [key]: inheritedValue, ...ownWithoutKey } = ownMcp;
+      const inheritedToolList = Object.assign(
+        Object.create({ [key]: inheritedValue }) as Record<string, unknown>,
+        ownWithoutKey,
+      );
+      expect(() => compileResponsePolicyFormat1(
+        { ...source, mcp: inheritedToolList },
+        SHARED_FORMAT_1_COMPILE_INPUT,
+      )).toThrow(`mcp.${key} must be an own property`);
+    }
+
+    for (const key of ["webFetchTools", "httpTools", "blockClasses"] as const) {
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: { ...source.mcp, response: { ...source.mcp?.response, [key]: undefined } },
+      }, SHARED_FORMAT_1_COMPILE_INPUT)).toThrow(`mcp.response field ${key} must not be undefined`);
+    }
+
+    const compiled = compileSharedFormat1Vector(3);
+    const completePolicy = {
+      ...compiled.policy,
+      webFetchTools: ["fetch.server.fetch"],
+      httpTools: ["fetch.server.fetch"],
+      blockClasses: ["secret"],
+      denyStrings: ["secret"],
+    };
+    for (const key of ["webFetchTools", "httpTools", "blockClasses", "denyStrings"] as const) {
+      const { [key]: inheritedValue, ...ownWithoutKey } = completePolicy;
+      const inheritedPolicy = Object.assign(
+        Object.create({ [key]: inheritedValue }) as Record<string, unknown>,
+        ownWithoutKey,
+      );
+      expect(() => validateCompiledResponsePolicyFormat1({
+        ...compiled,
+        policy: inheritedPolicy,
+      })).toThrow(`policy field ${key} must be an own property`);
+      expect(() => validateCompiledResponsePolicyFormat1({
+        ...compiled,
+        policy: { ...completePolicy, [key]: undefined },
+      })).toThrow(`policy field ${key} must not be undefined`);
+    }
   });
   it(`verifies signed format 1 response policy bytes in ${runtime}`, async () => {
     const fixture = responsePolicyFormat1Fixture.jwsFormat1;
