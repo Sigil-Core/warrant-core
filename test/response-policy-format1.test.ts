@@ -100,6 +100,63 @@ describe("CompiledResponsePolicy format 1", () => {
         mcp: { ...source.mcp, response },
       }, COMPILE_INPUT)).toThrow(/mcp\.response field \w+ must be an own property/);
     }
+    const inheritedMcp = Object.assign(
+      Object.create({ mcp: source.mcp }) as Record<string, unknown>,
+      { version: source.version },
+    );
+    expect(() => compileResponsePolicyFormat1(
+      inheritedMcp as typeof source,
+      COMPILE_INPUT,
+    )).toThrow("Policy 2.2.x AST field mcp must be an own property");
+
+    const inheritedResponseContainer = Object.assign(
+      Object.create({ response: source.mcp?.response }) as Record<string, unknown>,
+      { allowedTools: source.mcp?.allowedTools },
+    );
+    expect(() => compileResponsePolicyFormat1({
+      ...source,
+      mcp: inheritedResponseContainer,
+    }, COMPILE_INPUT)).toThrow("mcp field response must be an own property");
+
+    for (const key of ["allowedTools", "blockedTools"] as const) {
+      const ownMcp = {
+        ...source.mcp,
+        allowedTools: ["fetch.server.fetch"],
+        blockedTools: ["blocked.*"],
+      };
+      const { [key]: inheritedValue, ...ownWithoutKey } = ownMcp;
+      const inheritedToolList = Object.assign(
+        Object.create({ [key]: inheritedValue }) as Record<string, unknown>,
+        ownWithoutKey,
+      );
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: inheritedToolList,
+      }, COMPILE_INPUT)).toThrow(`mcp.${key} must be an own property`);
+      expect(() => compileResponsePolicyFormat1({
+        ...source,
+        mcp: ownMcp,
+      }, COMPILE_INPUT)).not.toThrow();
+    }
+
+    for (const key of ["webFetchTools", "httpTools", "blockClasses", "denyStrings"] as const) {
+      const ownPolicy = { ...compiled.policy };
+      const inheritedValue = ownPolicy[key];
+      if (inheritedValue === undefined) continue;
+      delete ownPolicy[key];
+      const inheritedPolicy = Object.assign(
+        Object.create({ [key]: inheritedValue }) as Record<string, unknown>,
+        ownPolicy,
+      );
+      expect(() => validateCompiledResponsePolicyFormat1({
+        ...compiled,
+        policy: inheritedPolicy,
+      })).toThrow(`policy field ${key} must be an own property`);
+      expect(() => validateCompiledResponsePolicyFormat1({
+        ...compiled,
+        policy: { ...compiled.policy },
+      })).not.toThrow();
+    }
     const invalidToolLists: unknown[] = [
       "prefixfetch.server.fetchsuffix",
       [],

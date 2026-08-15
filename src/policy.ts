@@ -731,6 +731,9 @@ export const assertMcpResponseExactKeys = (response: Record<string, unknown>): v
 
 export function assertMcpToolLists(mcp: Record<string, unknown>): void {
   for (const key of ["allowedTools", "blockedTools"] as const) {
+    if (key in mcp && !Object.prototype.hasOwnProperty.call(mcp, key)) {
+      throw new TypeError(`mcp.${key} must be an own property`);
+    }
     const value = mcp[key];
     if (value === undefined) continue;
     if (!Array.isArray(value) || value.length === 0

@@ -68,6 +68,8 @@ const requireExactKeys = (
   if (unknown.length > 0) throw new TypeError(`${path} contains unknown field ${unknown[0]}`);
   const missing = required.filter((key) => !Object.hasOwn(value, key));
   if (missing.length > 0) throw new TypeError(`${path} is missing required field ${missing[0]}`);
+  const inherited = optional.find((key) => key in value && !Object.hasOwn(value, key));
+  if (inherited !== undefined) throw new TypeError(`${path} field ${inherited} must be an own property`);
 };
 
 const requireString = (value: unknown, path: string): string => {
@@ -200,8 +202,15 @@ export function validateCompiledResponsePolicyFormat1(
 
 const responseFromPolicy = (policy: ParsedPolicy): Record<string, unknown> => {
   if (!/^2\.2\.\d+$/.test(policy.version)) throw new TypeError("Format 1 requires a Policy 2.2.x AST");
+  if ("mcp" in policy && !Object.hasOwn(policy, "mcp")) {
+    throw new TypeError("Policy 2.2.x AST field mcp must be an own property");
+  }
   const mcp = policy.mcp;
-  if (!isRecord(mcp) || !isRecord(mcp.response)) throw new TypeError("Policy 2.2.x AST does not declare MCP response coverage");
+  if (!isRecord(mcp)) throw new TypeError("Policy 2.2.x AST does not declare MCP response coverage");
+  if ("response" in mcp && !Object.hasOwn(mcp, "response")) {
+    throw new TypeError("mcp field response must be an own property");
+  }
+  if (!isRecord(mcp.response)) throw new TypeError("Policy 2.2.x AST does not declare MCP response coverage");
   assertMcpResponseExactKeys(mcp.response);
   return mcp.response;
 };
