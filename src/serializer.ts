@@ -279,6 +279,7 @@ const assertResponsePolicySerialization = (policy: ParsedPolicy, customRules: Va
   if (problem) throw new TypeError(problem);
 };
 
+// skipcq: JS-R1005 - Policy 2.3 response fields retain one canonical, ordered serializer so emitted signed bytes stay auditable.
 const mcpSection = (value: unknown): string | undefined => {
   if (value === undefined) return undefined;
   if (!isRecord(value)) throw new TypeError("mcp must be an object");
