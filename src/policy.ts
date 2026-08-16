@@ -165,8 +165,8 @@ function parseVersion(markdown: string): string {
   const version = values[0] ?? "0.0.0";
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid policy version "${version}"; expected semver X.Y.Z`);
   const [major = 0, minor = 0] = version.split(".").map(Number);
-  if (major > 2 || (major === 2 && minor > 2)) {
-    throw new Error(`Policy version ${version} is newer than this engine (supports 0.x, 1.x, 2.0.x, 2.1.x, and 2.2.x)`);
+  if (major > 2 || (major === 2 && minor > 3)) {
+    throw new Error(`Policy version ${version} is newer than this engine (supports 0.x, 1.x, 2.0.x, 2.1.x, 2.2.x, and 2.3.x)`);
   }
   return version;
 }
@@ -179,6 +179,11 @@ const isPolicy22 = (version: string): boolean => {
   const { major, minor } = policyVersionParts(version);
   return major === 2 && minor === 2;
 };
+const isPolicy23 = (version: string): boolean => {
+  const { major, minor } = policyVersionParts(version);
+  return major === 2 && minor === 3;
+};
+const isResponsePolicyVersion = (version: string): boolean => isPolicy22(version) || isPolicy23(version);
 
 function isRootPolicySyntax(line: string): boolean {
   const key = line.match(/^([A-Za-z_][\w.]*)\s*:/)?.[1];
@@ -647,7 +652,7 @@ const parseCustomDenyString = (rules: Array<Record<string, unknown>>, line: stri
 const parseResponseDenyString = (rules: Array<Record<string, unknown>>, line: string, version: string): boolean => {
   const match = line.match(/^response\.deny_string:\s*(.*)$/);
   if (!match) return false;
-  if (!isPolicy22(version)) throw new Error("response.deny_string requires Policy 2.2.x");
+  if (!isResponsePolicyVersion(version)) throw new Error("response.deny_string requires Policy 2.2.x or 2.3.x");
   const raw = match[1] ?? "";
   if (!/^"(?:[^"\\]|\\["\\/bfnrt]|\\u[0-9A-Fa-f]{4})*"$/.test(raw)) {
     throw new Error("response.deny_string must be a nonempty JSON double-quoted string");
@@ -719,6 +724,9 @@ const MCP_RESPONSE_KEYS = new Set([
   "httpTools",
   "deterministicRuleset",
   "blockClasses",
+  "redactClasses",
+  "scanner",
+  "observe",
 ]);
 
 export const assertMcpResponseExactKeys = (response: Record<string, unknown>): void => {
@@ -757,15 +765,58 @@ const responseClassList = (value: string, key: string): string[] => {
   if (values.some((entry) => !RESPONSE_CLASSES.has(entry))) throw new Error(`${key} contains an unknown response class`);
   return values;
 };
+const scannerProfile = (value: string, key: string): string => {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) || value.includes("://")) {
+    throw new Error(`${key} must be an opaque operator profile identifier, not a URL`);
+  }
+  return value;
+};
+const scannerConfidence = (value: string, key: string): number => {
+  if (!/^(?:0|1|0\.\d{1,4})$/.test(value) || String(Number(value)) !== value) {
+    throw new Error(`${key} must be a canonical decimal from 0 through 1 with at most four fractional digits`);
+  }
+  return Number(value);
+};
+const canonicalObserveUntil = (value: string, key: string): string => {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)
+    || Number.isNaN(Date.parse(value))
+    || new Date(value).toISOString().replace(".000Z", "Z") !== value) {
+    throw new Error(`${key} must be canonical UTC RFC 3339 seconds`);
+  }
+  return value;
+};
+const nestedResponseRecord = (
+  response: Record<string, unknown>,
+  key: "scanner" | "observe",
+): Record<string, unknown> => {
+  const current = response[key];
+  if (current === undefined) {
+    const created: Record<string, unknown> = {};
+    response[key] = created;
+    return created;
+  }
+  if (typeof current !== "object" || current === null || Array.isArray(current)) {
+    throw new Error(`response.${key} must be an object`);
+  }
+  return current as Record<string, unknown>;
+};
 const applyMcpResponseValue = (response: Record<string, unknown>, key: string, value: string, version: string): boolean => {
   if (!key.startsWith("response.")) return false;
-  if (!isPolicy22(version)) throw new Error(`${key} requires Policy 2.2.x`);
+  if (!isResponsePolicyVersion(version)) throw new Error(`${key} requires Policy 2.2.x or 2.3.x`);
   if (key === "response.web_fetch_tools") response.webFetchTools = responseList(value, key);
   else if (key === "response.http_tools") response.httpTools = responseList(value, key);
   else if (key === "response.deterministic_ruleset") {
     if (value !== "sof-response-rules-v1") throw new Error("response.deterministic_ruleset must be sof-response-rules-v1");
     response.deterministicRuleset = value;
   } else if (key === "response.block_classes") response.blockClasses = responseClassList(value, key);
+  else if (!isPolicy23(version)) throw new Error(`${key} requires Policy 2.3.x`);
+  else if (key === "response.redact_classes") response.redactClasses = responseClassList(value, key);
+  else if (key === "response.scanner.required") nestedResponseRecord(response, "scanner").required = boolean(value, key, true);
+  else if (key === "response.scanner.profile") nestedResponseRecord(response, "scanner").profile = scannerProfile(value, key);
+  else if (key === "response.scanner.classes") nestedResponseRecord(response, "scanner").classes = responseClassList(value, key);
+  else if (key === "response.scanner.min_confidence") nestedResponseRecord(response, "scanner").minConfidence = scannerConfidence(value, key);
+  else if (key === "response.observe_classes") nestedResponseRecord(response, "observe").classes = responseClassList(value, key);
+  else if (key === "response.observe_until") nestedResponseRecord(response, "observe").until = canonicalObserveUntil(value, key);
   else throw new Error(`Unrecognized MCP policy key: ${key}`);
   return true;
 };
@@ -813,6 +864,17 @@ export function mcpResponseCoverageProblem(
 const validateMcpResponse = (result: Record<string, unknown>, response: Record<string, unknown>): void => {
   const problem = mcpResponseCoverageProblem(result, response);
   if (problem) throw new Error(problem);
+  const scanner = response.scanner as Record<string, unknown> | undefined;
+  if (scanner !== undefined) {
+    const keys = ["required", "profile", "classes", "minConfidence"];
+    const missing = keys.find((key) => !Object.hasOwn(scanner, key));
+    if (missing !== undefined) throw new Error(`response.scanner.${missing} is required when scanner policy is declared`);
+  }
+  const observe = response.observe as Record<string, unknown> | undefined;
+  if (observe !== undefined) {
+    if (!Object.hasOwn(observe, "classes")) throw new Error("response.observe_classes is required with response.observe_until");
+    if (!Object.hasOwn(observe, "until")) throw new Error("response.observe_until is required with response.observe_classes");
+  }
 };
 const parseMcp = (lines: string[], isV2: boolean, version: string): Record<string, unknown> => {
   if (!isV2) throw new Error("Policy block ## mcp requires version 2.0.0");

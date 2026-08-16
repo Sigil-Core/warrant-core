@@ -50,7 +50,7 @@ function serialize(value: unknown, stack: Set<object>): string {
 }
 
 function serializeArray(value: unknown[], stack: Set<object>): string {
-  if (Object.getPrototypeOf(value) !== Array.prototype) throw new TypeError("pg-commit-v1 rejects non-plain arrays");
+  if (!isPlainArray(value)) throw new TypeError("pg-commit-v1 rejects non-plain arrays");
   if (Object.getOwnPropertySymbols(value).length) throw new TypeError("pg-commit-v1 rejects symbol-keyed object properties");
   const names = Object.getOwnPropertyNames(value);
   for (const name of names) {
@@ -72,7 +72,22 @@ function serializeArray(value: unknown[], stack: Set<object>): string {
 
 function isPlainObject(value: object): boolean {
   const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  if (prototype === null) return true;
+  const constructor = Object.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+  return Object.getPrototypeOf(prototype) === null
+    && typeof constructor === "function"
+    && constructor.name === "Object"
+    && constructor.prototype === prototype;
+}
+
+function isPlainArray(value: unknown[]): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  const constructor = Object.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+  return Object.getPrototypeOf(prototype) !== null
+    && Object.getPrototypeOf(Object.getPrototypeOf(prototype)) === null
+    && typeof constructor === "function"
+    && constructor.name === "Array"
+    && constructor.prototype === prototype;
 }
 
 function isArrayIndex(name: string, length: number): boolean {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { generateKeyPairSync } from "node:crypto";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import {
   appendSignatureBlock,
@@ -618,6 +619,21 @@ describe("canonicalization and cryptographic adapters", () => {
     nullPrototype.z = true;
     nullPrototype.a = shared;
     expect(canonicalizePgCommitV1({ left: shared, right: shared, nullPrototype })).toBe('{"left":{"label":"shared","values":[1,2]},"nullPrototype":{"a":{"label":"shared","values":[1,2]},"z":true},"right":{"label":"shared","values":[1,2]}}');
+  });
+
+  it("accepts cross-realm JSON containers without accepting forged prototypes", () => {
+    const crossRealm = runInNewContext('({"nested":[1,{"safe":true}]})') as unknown;
+    expect(canonicalizePgCommitV1(crossRealm)).toBe('{"nested":[1,{"safe":true}]}');
+
+    const forgedPrototype = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(forgedPrototype, "constructor", { value: Object });
+    const forged = Object.create(forgedPrototype) as Record<string, unknown>;
+    forged.safe = true;
+    expect(() => canonicalizePgCommitV1(forged)).toThrow("pg-commit-v1 rejects non-plain objects");
+
+    const forgedArray: unknown[] = [];
+    Object.setPrototypeOf(forgedArray, Object.create(null));
+    expect(() => canonicalizePgCommitV1(forgedArray)).toThrow("pg-commit-v1 rejects non-plain arrays");
   });
 
   it("provides equivalent browser and Worker WebCrypto adapters", async () => {

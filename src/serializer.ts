@@ -256,8 +256,13 @@ const assertResponsePolicySerialization = (policy: ParsedPolicy, customRules: Va
   const responseRules = customRules.filter((rule) => rule.type === "response_deny_string");
   if (response === undefined && responseRules.length === 0) return;
   if (response !== undefined) assertMcpResponseExactKeys(response);
-  if (!/^2\.2\.\d+$/.test(policy.version)) {
-    throw new TypeError("MCP response policy requires Policy 2.2.x");
+  if (!/^2\.[23]\.\d+$/.test(policy.version)) {
+    throw new TypeError("MCP response policy requires Policy 2.2.x or 2.3.x");
+  }
+  const hasFormat2Controls = response !== undefined
+    && ["redactClasses", "scanner", "observe"].some((key) => Object.hasOwn(response, key));
+  if (hasFormat2Controls && !/^2\.3\.\d+$/.test(policy.version)) {
+    throw new TypeError("Redaction, scanner, and observe controls require Policy 2.3.x");
   }
   const covered = response === undefined ? [] : responseCoverage(response, "mcp.response");
   if (covered.length === 0) {
@@ -296,6 +301,70 @@ const mcpSection = (value: unknown): string | undefined => {
       "mcp.response.blockClasses",
       true,
     );
+    add(
+      lines,
+      "response.redact_classes",
+      responseBlockClasses(value.response.redactClasses, "mcp.response.redactClasses"),
+      "mcp.response.redactClasses",
+      true,
+    );
+    if (value.response.scanner !== undefined) {
+      if (!isRecord(value.response.scanner)) throw new TypeError("mcp.response.scanner must be an object");
+      const scanner = value.response.scanner;
+      const scannerKeys = ["required", "profile", "classes", "minConfidence"];
+      const scannerUnknown = Object.keys(scanner).find((key) => !scannerKeys.includes(key));
+      if (scannerUnknown !== undefined) throw new TypeError(`mcp.response.scanner contains unknown field ${scannerUnknown}`);
+      const scannerMissing = scannerKeys.find((key) => !Object.hasOwn(scanner, key));
+      if (scannerMissing !== undefined) throw new TypeError(`mcp.response.scanner is missing required field ${scannerMissing}`);
+      if (typeof scanner.required !== "boolean") {
+        throw new TypeError("mcp.response.scanner.required must be a boolean");
+      }
+      if (typeof scanner.profile !== "string"
+        || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(scanner.profile)
+        || scanner.profile.includes("://")) {
+        throw new TypeError("mcp.response.scanner.profile must be an opaque operator profile identifier, not a URL");
+      }
+      if (typeof scanner.minConfidence !== "number"
+        || !Number.isFinite(scanner.minConfidence)
+        || scanner.minConfidence < 0 || scanner.minConfidence > 1
+        || Number(scanner.minConfidence.toFixed(4)) !== scanner.minConfidence) {
+        throw new TypeError("mcp.response.scanner.minConfidence must be a canonical decimal from 0 through 1 with at most four fractional digits");
+      }
+      add(lines, "response.scanner.required", scanner.required, "mcp.response.scanner.required");
+      add(lines, "response.scanner.profile", scanner.profile, "mcp.response.scanner.profile");
+      add(
+        lines,
+        "response.scanner.classes",
+        responseBlockClasses(scanner.classes, "mcp.response.scanner.classes"),
+        "mcp.response.scanner.classes",
+        true,
+      );
+      add(lines, "response.scanner.min_confidence", scanner.minConfidence, "mcp.response.scanner.minConfidence");
+    }
+    if (value.response.observe !== undefined) {
+      if (!isRecord(value.response.observe)) throw new TypeError("mcp.response.observe must be an object");
+      const observe = value.response.observe;
+      const observeKeys = ["classes", "until"];
+      const observeUnknown = Object.keys(observe).find((key) => !observeKeys.includes(key));
+      if (observeUnknown !== undefined) throw new TypeError(`mcp.response.observe contains unknown field ${observeUnknown}`);
+      const observeMissing = observeKeys.find((key) => !Object.hasOwn(observe, key));
+      if (observeMissing !== undefined) throw new TypeError(`mcp.response.observe is missing required field ${observeMissing}`);
+      const observeUntil = observe.until;
+      if (typeof observeUntil !== "string"
+        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(observeUntil)
+        || Number.isNaN(Date.parse(observeUntil))
+        || new Date(observeUntil).toISOString().replace(".000Z", "Z") !== observeUntil) {
+        throw new TypeError("mcp.response.observe.until must be canonical UTC RFC 3339 seconds");
+      }
+      add(
+        lines,
+        "response.observe_classes",
+        responseBlockClasses(observe.classes, "mcp.response.observe.classes"),
+        "mcp.response.observe.classes",
+        true,
+      );
+      add(lines, "response.observe_until", value.response.observe.until, "mcp.response.observe.until");
+    }
   }
   genericControls(lines, value, "mcp");
   return lines.length ? `## mcp\n${lines.join("\n")}` : undefined;
