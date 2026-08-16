@@ -23,6 +23,11 @@ import {
   unsignedSigningPayload,
   validateCompiledResponsePolicyFormat1,
   verifyCompiledResponsePolicyFormat1,
+  canonicalizeCompiledResponsePolicyFormat2,
+  compileResponsePolicyFormat2,
+  compiledResponsePolicyFormat2Bytes,
+  hashCompiledResponsePolicyFormat2,
+  validateCompiledResponsePolicyFormat2,
   WarrantEnvelopeError,
 } from "../../src/index.js";
 import type { CryptoAdapter, JsonValue } from "../../src/types.js";
@@ -253,6 +258,43 @@ const defineSharedResponsePolicyFormat1Tests = (runtime: string, adapter: Crypto
       ...context,
       taskId: fixture.invalid.claimTaskId,
     })).rejects.toThrow("taskId mismatch");
+  });
+};
+
+const defineSharedResponsePolicyFormat2Tests = (runtime: string, adapter: CryptoAdapter): void => {
+  const source = [
+    "version: 2.3.0", "", "## mcp",
+    "allowed_tools: fetch.server.fetch, api.server.request",
+    "response.web_fetch_tools: fetch.server.fetch",
+    "response.http_tools: api.server.request",
+    "response.deterministic_ruleset: sof-response-rules-v1",
+    "response.block_classes: prompt_injection",
+    "response.redact_classes: pii, secret",
+    "response.scanner.required: true",
+    "response.scanner.profile: operator-presidio-v1",
+    "response.scanner.classes: pii, prompt_injection",
+    "response.scanner.min_confidence: 0.85",
+    "response.observe_classes: prompt_injection",
+    "response.observe_until: 2026-09-05T00:00:00Z",
+  ].join("\n");
+  const issuedAt = Date.parse("2026-08-06T00:00:00Z") / 1000;
+  const input = {
+    issuer: "https://sign.sigil.example", keyId: "sign-key-1",
+    tenantId: "tenant-1", taskId: "task-1", policyHash: "7".repeat(64),
+    issuedAt, expiresAt: issuedAt + 300, revocationEpoch: 9,
+    deterministicRulesetDigest: FORMAT_1_DIGEST,
+    classCatalogDigest: FORMAT_1_CATALOG_DIGEST,
+  };
+  it(`compiles canonical format 2 response policy bytes in ${runtime}`, async () => {
+    const parsed = parsePolicyMarkdown(source);
+    expect(parsePolicyMarkdown(serializePolicyMarkdown(parsed))).toEqual(parsed);
+    const compiled = compileResponsePolicyFormat2(parsed, input);
+    expect(() => validateCompiledResponsePolicyFormat2(compiled)).not.toThrow();
+    const canonical = canonicalizeCompiledResponsePolicyFormat2(compiled);
+    expect(compiledResponsePolicyFormat2Bytes(compiled)).toEqual(new TextEncoder().encode(canonical));
+    await expect(hashCompiledResponsePolicyFormat2(adapter, compiled)).resolves.toBe(
+      "217958609844eced59084e8cae8dbc06e02f8661d9009375382dbfaa2ccc8cd9",
+    );
   });
 };
 
@@ -722,6 +764,7 @@ export const defineSharedRuntimeVectorTests = (runtime: string, adapter: CryptoA
   });
   defineSharedMcpToolOverlapTests(runtime);
   defineSharedResponsePolicyFormat1Tests(runtime, adapter);
+  defineSharedResponsePolicyFormat2Tests(runtime, adapter);
   defineSharedToolCallControlTests(runtime);
   defineSharedPolicyCommitmentAndSignatureVectorTests(runtime, adapter);
 };

@@ -6,7 +6,8 @@
     "1.x",
     "2.0.x",
     "2.1.x",
-    "2.2.x"
+    "2.2.x",
+    "2.3.x"
   ],
   "feature_keys": [
     "policy.version",
@@ -29,6 +30,13 @@
     "mcp.response.http_tools",
     "mcp.response.deterministic_ruleset",
     "mcp.response.block_classes",
+    "mcp.response.redact_classes",
+    "mcp.response.scanner.required",
+    "mcp.response.scanner.profile",
+    "mcp.response.scanner.classes",
+    "mcp.response.scanner.min_confidence",
+    "mcp.response.observe_classes",
+    "mcp.response.observe_until",
     "custom",
     "custom.response.deny_string",
     "soft_limits",

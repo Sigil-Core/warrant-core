@@ -26,6 +26,17 @@ export interface ParsedMcpResponsePolicy {
   httpTools?: string[];
   deterministicRuleset: "sof-response-rules-v1";
   blockClasses?: ResponsePolicyClass[];
+  redactClasses?: ResponsePolicyClass[];
+  scanner?: {
+    required: boolean;
+    profile: string;
+    classes: ResponsePolicyClass[];
+    minConfidence: number;
+  };
+  observe?: {
+    classes: ResponsePolicyClass[];
+    until: string;
+  };
 }
 
 export interface CompiledResponsePolicyBounds {
@@ -101,6 +112,37 @@ export interface CompiledResponsePolicyVerificationContext {
 }
 
 export interface VerifiedCompiledResponsePolicyFormat1 extends CompiledResponsePolicyFormat1 {
+  compiledPolicyDigest: string;
+}
+
+export interface CompiledResponsePolicyFormat2Scanner {
+  required: boolean;
+  profile: string;
+  classes: ResponsePolicyClass[];
+  minConfidence: number;
+}
+
+export interface CompiledResponsePolicyFormat2Observe {
+  classes: ResponsePolicyClass[];
+  until: string;
+}
+
+export interface CompiledResponsePolicyFormat2Policy extends CompiledResponsePolicyFormat1Policy {
+  redactClasses?: ResponsePolicyClass[];
+  scanner?: CompiledResponsePolicyFormat2Scanner;
+  observe?: CompiledResponsePolicyFormat2Observe;
+}
+
+export interface CompiledResponsePolicyFormat2
+  extends Omit<CompiledResponsePolicyFormat1, "formatVersion" | "policyVersion" | "policy"> {
+  formatVersion: 2;
+  policyVersion: string;
+  policy: CompiledResponsePolicyFormat2Policy;
+}
+
+export type CompiledResponsePolicyFormat2Input = CompiledResponsePolicyFormat1Input;
+
+export interface VerifiedCompiledResponsePolicyFormat2 extends CompiledResponsePolicyFormat2 {
   compiledPolicyDigest: string;
 }
 

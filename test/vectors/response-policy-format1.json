@@ -118,10 +118,6 @@
   ],
   "negative": [
     {
-      "id": "policy-2.3-unsupported",
-      "markdown": "version: 2.3.0\n\n## mcp\nallowed_tools: fetch.server.fetch"
-    },
-    {
       "id": "legacy-response-key",
       "markdown": "version: 2.1.1\n\n## mcp\nallowed_tools: fetch.server.fetch\nresponse.web_fetch_tools: fetch.server.fetch\nresponse.deterministic_ruleset: sof-response-rules-v1"
     },

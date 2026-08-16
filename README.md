@@ -47,15 +47,17 @@ SHA-1 shasum `19348e216417eb34a4fe1a56f8432f9a66dcad69`, and Git head
 `ac6f469f57b1fe6945642daf9914d7b256abf221`. This document does not independently
 claim provenance for that release.
 
-Version `0.3.0` is the Policy 2.2 and compiled response-policy format 1 release
-candidate. It is not published yet. Do not claim npm integrity or provenance
-until the trusted-publisher workflow and registry readback complete.
+Version `0.3.0` is the immutable Policy 2.2 and compiled response-policy format
+1 release. Registry readback reports dist integrity
+`sha512-WussbFca2QF0N/bWxdZhu94TEEbPKs+ZHLM+ZGDZZddwBN0tyvq/mzTqqdM4c9pXRUFD4fLMYV2Te6HIhsEnTg==`
+and source merge commit `3f04df5ea7c9585702133fbcc178f1d86bf042fb`.
 
 ## Public API
 
-The Policy 2.2 and compiled response-policy format 1 exports documented below
-are unreleased `0.3.0` candidate APIs. The published `0.2.4` installation shown
-above does not provide them.
+The published `0.3.0` package provides Policy 2.2 and compiled response-policy
+format 1. Version `0.4.0` is the Policy 2.3 and compiled response-policy format
+2 release candidate. It remains unavailable until its reviewed registry
+publication and byte readback complete.
 
 ```ts
 import {
@@ -77,14 +79,16 @@ import {
   unsignedSigningPayload,
   validateAndParsePolicyMarkdown,
   validateCompiledResponsePolicyFormat1,
+  validateCompiledResponsePolicyFormat2,
   validatePolicyMarkdown,
   verifyCompiledResponsePolicyFormat1,
+  verifyCompiledResponsePolicyFormat2,
 } from "@sigilcore/warrant-core";
 ```
 
 | Export | Contract |
 | --- | --- |
-| `parsePolicyMarkdown(markdown)` | Parses unversioned Policy 0.x and versioned Policy 1.x, 2.0.x, 2.1.x, and 2.2.x input. Policy 2.2 adds conditional MCP response coverage, deterministic block classes, and response-specific deny literals. Coverage values remain opaque exact strings and must be exact allowed-tool members. Unknown, misplaced, wildcard, duplicate, blocked, or version-incompatible response controls reject, and response defaults are never inserted into legacy ASTs. |
+| `parsePolicyMarkdown(markdown)` | Parses unversioned Policy 0.x and versioned Policy 1.x through 2.3.x input. Policy 2.2 adds conditional MCP response coverage; Policy 2.3 adds redaction, scanner, and observe controls. Coverage values remain opaque exact strings and must be exact allowed-tool members. Unknown, misplaced, wildcard, duplicate, blocked, or version-incompatible response controls reject, and response defaults are never inserted into legacy ASTs. |
 | `lintPolicyAdvisories(policy)` | Returns non-blocking recommended-field and trusted-shim warnings for Policy 2.1 resource profiles. |
 | `canonicalizePolicyObject(value)` | Produces the established Warrant policy-hash JSON serialization. Use only for Warrant policy compatibility. |
 | `policyCanonicalBytes(policy)` | UTF-8 bytes of `canonicalizePolicyObject(policy)`. |
@@ -108,6 +112,10 @@ import {
 | `compiledResponsePolicyFormat1Bytes(value)` | Returns the exact UTF-8 payload bytes used by compact JWS. |
 | `hashCompiledResponsePolicyFormat1(adapter, value)` | Returns the lowercase SHA-256 digest of the exact canonical payload bytes. |
 | `verifyCompiledResponsePolicyFormat1(adapter, compactJws, context)` | Verifies canonical compact JWS, Ed25519, trusted claims, lifetime, revocation, digests, and coverage. It returns the flattened payload plus `compiledPolicyDigest`. |
+| `compileResponsePolicyFormat2(policy, input)` | Compiles a parsed Policy 2.3.x AST into schema-closed format 2, including redaction, scanner, and observe bindings. |
+| `validateCompiledResponsePolicyFormat2(value)` | Rejects format downgrade, hostile fields, malformed scanner controls, non-canonical confidence, and invalid observe windows. |
+| `canonicalizeCompiledResponsePolicyFormat2(value)` | Emits strict `pg-commit-v1` canonical JSON for validated format 2. |
+| `verifyCompiledResponsePolicyFormat2(adapter, compactJws, context)` | Verifies canonical format 2 JWS bytes and trusted claims without permitting format downgrade. |
 | `AUTHORING_CAPABILITY_MANIFEST` | Executable per-field author/import/preserve/deploy contract for `manual-form`, `manual-advanced`, and `builder`. |
 
 The root entry point also exports the `ParsedPolicy`, `CryptoAdapter`, `JsonValue`, and `SplitSignatureBlock` types.
@@ -150,6 +158,27 @@ payloads but performs no network call, key discovery, policy enforcement, or
 response inspection. Sigil Sign supplies trusted execution context and signs
 the compact JWS. Enforcers supply the independently trusted public key and
 expected claims.
+
+## Policy 2.3 response-policy contract
+
+Policy 2.3 retains every Policy 2.2 field and adds these exact `## mcp` keys:
+
+```text
+response.redact_classes: pii, secret
+response.scanner.required: true
+response.scanner.profile: operator-presidio-v1
+response.scanner.classes: pii, prompt_injection
+response.scanner.min_confidence: 0.85
+response.observe_classes: prompt_injection
+response.observe_until: 2026-09-05T00:00:00Z
+```
+
+Scanner profiles are opaque operator identifiers, never endpoints. Confidence
+is canonical decimal text from zero through one with at most four fractional
+digits. Observe classes and their canonical UTC expiry are inseparable, and a
+compiled observe window must end after issuance and no more than 30 days later.
+Format 1 rejects Policy 2.3; format 2 rejects Policy 2.2 and hostile unknown
+fields. Older Policy 2.2 parsing and format 1 bytes remain unchanged.
 
 ## Canonicalization profiles
 
@@ -249,7 +278,7 @@ Every security-sensitive consumer pins the same exact `@sigilcore/warrant-core` 
 
 ## Sigil Sign parser parity
 
-The package keeps a frozen accepted-and-rejected parser corpus against the approved coordinated Sigil Sign R1 baseline commit `62638f0c2430965c4705fcf3927914f0aa8de5b0`. The final package release must re-pin this field to the reviewed Sign implementation head before publication. The prior pin `08c1d7376de358a4bf4254c382b9bcc1fec33f83` introduced duplicate-key rejection within `warranty.md` sections; this package already rejected those inputs. The corpus covers six canonical policies plus 105 edge cases, including eleven duplicate-key reject vectors across `tool_calls`, `custom`, `mcp`, `soft_limits`, `execution_limits`, and the Policy 2.1 `repository`, `filesystem`, `git`, and `database` profiles. It asserts outcome parity, not error text. One vector, `duplicate-tool-calls-block-then-inline-allowed`, rejects on both sides for different reasons: Sign parses the block-format list and then rejects the inline redeclaration as a duplicate, while this package rejects the block-format line itself because it accepts only inline comma-separated lists. That block-format divergence is pre-existing and intentional. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
+The package keeps a frozen accepted-and-rejected parser corpus against the reviewed coordinated Sigil Sign Release 2 implementation base `7970877fd37b782142cbd8bd83ce7f1d8212caf3`. The prior Release 1 pin was `62638f0c2430965c4705fcf3927914f0aa8de5b0`; the earlier pin `08c1d7376de358a4bf4254c382b9bcc1fec33f83` introduced duplicate-key rejection within `warranty.md` sections, which this package already rejected. The corpus covers six canonical policies plus 105 edge cases, including eleven duplicate-key reject vectors across `tool_calls`, `custom`, `mcp`, `soft_limits`, `execution_limits`, and the Policy 2.1 `repository`, `filesystem`, `git`, and `database` profiles. It asserts outcome parity, not error text. One vector, `duplicate-tool-calls-block-then-inline-allowed`, rejects on both sides for different reasons: Sign parses the block-format list and then rejects the inline redeclaration as a duplicate, while this package rejects the block-format line itself because it accepts only inline comma-separated lists. That block-format divergence is pre-existing and intentional. `execution_limits` preserves approval-only, shim-only, and combined controls in canonical output. A standalone `require_shim: false` is rejected because it has no enforcement effect. Sigilcore consumer compatibility is authoritative where its committed parser contract intentionally differs from this Sign corpus. After building both repositories, run the local differential gate with the absolute Sigil Sign checkout path:
 
 ```sh
 npm run test:sign-parity -- /absolute/path/to/sigil-sign

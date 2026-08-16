@@ -123,6 +123,13 @@ const FIXED_SECTION_KEYS: Readonly<Record<string, ReadonlySet<string>>> = {
     "response.http_tools",
     "response.deterministic_ruleset",
     "response.block_classes",
+    "response.redact_classes",
+    "response.scanner.required",
+    "response.scanner.profile",
+    "response.scanner.classes",
+    "response.scanner.min_confidence",
+    "response.observe_classes",
+    "response.observe_until",
   ]),
   soft_limits: new Set([
     "daily_evm_limit_eth",
@@ -520,7 +527,8 @@ const scanSection = (
       || directive.key === "calldata_unknown_selector"
       || directive.key.startsWith("http.method_rules.")
     );
-  if (v21Only && versionRange !== undefined && versionRange !== "2.1.x" && versionRange !== "2.2.x") {
+  if (v21Only && versionRange !== undefined
+    && versionRange !== "2.1.x" && versionRange !== "2.2.x" && versionRange !== "2.3.x") {
     if (section.name in PROFILE_PATH_PREFIX) {
       errors.push(
         issue(
@@ -547,13 +555,31 @@ const scanSection = (
     }
   }
   const responseDirectives = directives.filter((directive) => directive.key.startsWith("response."));
-  if (responseDirectives.length > 0 && versionRange !== undefined && versionRange !== "2.2.x") {
+  if (responseDirectives.length > 0 && versionRange !== undefined
+    && versionRange !== "2.2.x" && versionRange !== "2.3.x") {
     for (const directive of responseDirectives) {
       errors.push(
         issue(
           "WARRANT_UNSUPPORTED_FIELD_VERSION",
           canonicalDirectivePath(section.name, directive.key),
           `${directive.key} requires Policy 2.2.x`,
+        ),
+      );
+    }
+  }
+  const response23Directives = responseDirectives.filter((directive) =>
+    directive.key === "response.redact_classes"
+    || directive.key.startsWith("response.scanner.")
+    || directive.key === "response.observe_classes"
+    || directive.key === "response.observe_until"
+  );
+  if (response23Directives.length > 0 && versionRange !== undefined && versionRange !== "2.3.x") {
+    for (const directive of response23Directives) {
+      errors.push(
+        issue(
+          "WARRANT_UNSUPPORTED_FIELD_VERSION",
+          canonicalDirectivePath(section.name, directive.key),
+          `${directive.key} requires Policy 2.3.x`,
         ),
       );
     }

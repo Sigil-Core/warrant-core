@@ -66,8 +66,8 @@ describe("Phase 1 authoring core", () => {
     const input = parsePolicyMarkdown("version: 2.1.1\n\n## evm\nallowed_actions: contract.call\nallowed_chains: 1\nrequire_calldata_enrichment: true\ncalldata_unknown_selector: deny\n\n## tool_calls\nallowed: http\nhttp.method_rules.PATCH.deny: true");
     const serialized = serializePolicyMarkdown(input);
     expect(parsePolicyMarkdown(serialized)).toEqual(input);
-    expect(() => serializePolicyMarkdown({ version: "2.3.0" }))
-      .toThrow("Policy version 2.3.0 is newer than this engine");
+    expect(() => serializePolicyMarkdown({ version: "2.4.0" }))
+      .toThrow("Policy version 2.4.0 is newer than this engine");
   });
 
   it("rejects invalid response-policy ASTs at the serializer boundary", () => {
@@ -95,7 +95,7 @@ describe("Phase 1 authoring core", () => {
           ...valid.mcp,
           response: { ...validResponse, [unknownKey]: ["secret"] },
         },
-      })).toThrow(`mcp.response contains unknown field ${unknownKey}`);
+      })).toThrow("require Policy 2.3.x");
     }
     const inheritedResponse = Object.assign(
       Object.create({ webFetchTools: ["fetch.server.fetch"] }) as Record<string, unknown>,
@@ -110,7 +110,7 @@ describe("Phase 1 authoring core", () => {
       mcp: { ...valid.mcp, allowedTools: "prefixfetch.server.fetchsuffix" as never },
     })).toThrow("mcp.allowedTools must contain unique exact values or one trailing * wildcard");
     expect(() => serializePolicyMarkdown({ ...valid, version: "2.1.0" }))
-      .toThrow("requires Policy 2.2.x");
+      .toThrow("requires Policy 2.2.x or 2.3.x");
     expect(() => serializePolicyMarkdown({
       ...valid,
       mcp: { ...valid.mcp, response: { webFetchTools: ["fetch.server.fetch"] } },
