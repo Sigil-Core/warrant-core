@@ -11,6 +11,7 @@ import type { JsonValue } from "../../src/types.js";
 
 interface ExpectedDecision {
   status: "APPROVED" | "PENDING" | "DENIED";
+  acceptedStatuses?: Array<"APPROVED" | "ALLOWED">;
   matchedRule: string | null;
   errorCode: string | null;
 }
@@ -72,6 +73,7 @@ describe("Proving Ground launch scenarios", () => {
     it(`${vector.id} declares a complete expected live outcome`, () => {
       expect(["APPROVED", "PENDING", "DENIED"]).toContain(vector.expected.status);
       if (vector.expected.status === "APPROVED") {
+        expect(vector.expected.acceptedStatuses).toEqual(["APPROVED", "ALLOWED"]);
         expect(vector.expected.matchedRule).toBeNull();
         expect(vector.expected.errorCode).toBeNull();
       } else {
@@ -82,6 +84,10 @@ describe("Proving Ground launch scenarios", () => {
 
     it(`${vector.id} preserves the observed current evaluator result`, () => {
       expect(vector.observedEvaluator.decision).toBe(vector.expected.status);
+      if (vector.expected.status === "APPROVED") {
+        expect(vector.expected.acceptedStatuses).toContain(vector.observedEvaluator.decision);
+        expect(vector.expected.acceptedStatuses).toContain("ALLOWED");
+      }
       expect(vector.observedEvaluator.violatedRule).toBe(vector.expected.matchedRule);
     });
 
