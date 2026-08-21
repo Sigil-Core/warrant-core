@@ -93,7 +93,11 @@ describe('decision literal gate', () => {
     try {
       mkdirSync(root);
       mkdirSync(outside);
-      symlinkSync(outside, resolve(root, 'linked'), 'dir');
+      symlinkSync(
+        outside,
+        resolve(root, 'linked'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
       writeFileSync(
         resolve(root, 'decision-literal-allowlist.json'),
         `${JSON.stringify({ version: 1, runtimePaths: ['linked'], allowedOccurrences: [] })}\n`,

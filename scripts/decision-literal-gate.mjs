@@ -9,12 +9,13 @@ const valueAfter = (flag, fallback) => {
 const root = resolve(valueAfter('--root', process.cwd()));
 const configPath = resolve(root, valueAfter('--config', 'decision-literal-allowlist.json'));
 const blocking = args.has('--blocking');
-let config;
-try {
-  config = JSON.parse(readFileSync(configPath, 'utf8'));
-} catch {
-  throw new Error('Invalid decision literal allowlist schema.');
-}
+const config = (() => {
+  try {
+    return JSON.parse(readFileSync(configPath, 'utf8'));
+  } catch {
+    throw new Error('Invalid decision literal allowlist schema.');
+  }
+})();
 const hasOnlyKeys = (value, keys) => (
   typeof value === 'object' && value !== null && !Array.isArray(value) &&
   Object.keys(value).every((key) => keys.has(key))
@@ -53,6 +54,9 @@ for (const allowance of allowances) {
 }
 
 const quotedLiteral = /(['"`])(APPROVED|ALLOWED)\1/g;
+const findAllowance = (path, literal, expression) => allowances.find((entry) => (
+  entry.path === path && entry.literal === literal && entry.expression === expression
+));
 const files = [];
 const walk = (absolute) => {
   for (const entry of readdirSync(absolute, { withFileTypes: true })) {
@@ -79,11 +83,8 @@ for (const file of files) {
   for (let index = 0; index < lines.length; index += 1) {
     const expression = lines[index].trim();
     quotedLiteral.lastIndex = 0;
-    let match;
-    while ((match = quotedLiteral.exec(lines[index])) !== null) {
-      const allowance = allowances.find((entry) => (
-        entry.path === repoPath && entry.literal === match[2] && entry.expression === expression
-      ));
+    for (const match of lines[index].matchAll(quotedLiteral)) {
+      const allowance = findAllowance(repoPath, match[2], expression);
       if (allowance) allowance.actualCount += 1;
       else violations.push(`${repoPath}:${index + 1}:${expression}`);
     }
@@ -99,8 +100,8 @@ for (const allowance of allowances) {
 
 if (violations.length === 0) {
   console.log('decision-literal-gate: 0 violations');
-  process.exit(0);
+} else {
+  console.error(`decision-literal-gate: ${violations.length} violation(s)${blocking ? '' : ' (advisory)'}`);
+  for (const violation of violations) console.error(violation);
+  process.exitCode = blocking ? 1 : 0;
 }
-console.error(`decision-literal-gate: ${violations.length} violation(s)${blocking ? '' : ' (advisory)'}`);
-for (const violation of violations) console.error(violation);
-process.exit(blocking ? 1 : 0);
