@@ -10,8 +10,7 @@ import { createNodeCryptoAdapter } from "../../src/crypto/node.js";
 import type { JsonValue } from "../../src/types.js";
 
 interface ExpectedDecision {
-  status: "APPROVED" | "PENDING" | "DENIED";
-  acceptedStatuses?: Array<"APPROVED" | "ALLOWED">;
+  status: "ALLOWED" | "PENDING" | "DENIED";
   matchedRule: string | null;
   errorCode: string | null;
 }
@@ -25,7 +24,7 @@ interface LaunchScenario {
   canonicalIntentJson: string;
   txCommitSha256: string;
   expected: ExpectedDecision;
-  observedEvaluator: {
+  expectedEvaluator: {
     decision: ExpectedDecision["status"];
     violatedRule: string | null;
     lexErrorCode: string | null;
@@ -39,7 +38,8 @@ interface LaunchScenario {
 const vectorFile = new URL("../vectors/launch-scenarios.json", import.meta.url);
 const fixture = JSON.parse(readFileSync(vectorFile, "utf8")) as {
   evaluatorValidation: {
-    sigilSignCommit: string;
+    sigilSignBaseCommit: string;
+    decisionVocabularyRevision: number;
     parser: string;
     evaluator: string;
   };
@@ -48,9 +48,10 @@ const fixture = JSON.parse(readFileSync(vectorFile, "utf8")) as {
 const nodeCrypto = createNodeCryptoAdapter();
 
 describe("Proving Ground launch scenarios", () => {
-  it("records the evaluator provenance for the frozen outcomes", () => {
+  it("records the Wave 2 expectation provenance", () => {
     expect(fixture.evaluatorValidation).toMatchObject({
-      sigilSignCommit: "53b891e",
+      sigilSignBaseCommit: "3b1f420ae037ac9550ea4986274c218f68f69d39",
+      decisionVocabularyRevision: 6,
       parser: "parseWarrantyContent",
       evaluator: "evaluateStrict",
     });
@@ -71,9 +72,8 @@ describe("Proving Ground launch scenarios", () => {
     });
 
     it(`${vector.id} declares a complete expected live outcome`, () => {
-      expect(["APPROVED", "PENDING", "DENIED"]).toContain(vector.expected.status);
-      if (vector.expected.status === "APPROVED") {
-        expect(vector.expected.acceptedStatuses).toEqual(["APPROVED", "ALLOWED"]);
+      expect(["ALLOWED", "PENDING", "DENIED"]).toContain(vector.expected.status);
+      if (vector.expected.status === "ALLOWED") {
         expect(vector.expected.matchedRule).toBeNull();
         expect(vector.expected.errorCode).toBeNull();
       } else {
@@ -82,13 +82,9 @@ describe("Proving Ground launch scenarios", () => {
       }
     });
 
-    it(`${vector.id} preserves the observed current evaluator result`, () => {
-      expect(vector.observedEvaluator.decision).toBe(vector.expected.status);
-      if (vector.expected.status === "APPROVED") {
-        expect(vector.expected.acceptedStatuses).toContain(vector.observedEvaluator.decision);
-        expect(vector.expected.acceptedStatuses).toContain("ALLOWED");
-      }
-      expect(vector.observedEvaluator.violatedRule).toBe(vector.expected.matchedRule);
+    it(`${vector.id} pins the Wave 2 evaluator result`, () => {
+      expect(vector.expectedEvaluator.decision).toBe(vector.expected.status);
+      expect(vector.expectedEvaluator.violatedRule).toBe(vector.expected.matchedRule);
     });
 
     if (vector.expectedPrecedence) {
