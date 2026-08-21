@@ -53,7 +53,7 @@ for (const allowance of allowances) {
   allowanceKeys.add(key);
 }
 
-const quotedLiteral = /(['"`])(APPROVED|ALLOWED)\1/g;
+const decisionLiteral = /APPROVED|ALLOWED/g;
 const findAllowance = (path, literal, expression) => allowances.find((entry) => (
   entry.path === path && entry.literal === literal && entry.expression === expression
 ));
@@ -82,9 +82,9 @@ for (const file of files) {
   const lines = readFileSync(file, 'utf8').split('\n');
   for (let index = 0; index < lines.length; index += 1) {
     const expression = lines[index].trim();
-    quotedLiteral.lastIndex = 0;
-    for (const match of lines[index].matchAll(quotedLiteral)) {
-      const allowance = findAllowance(repoPath, match[2], expression);
+    decisionLiteral.lastIndex = 0;
+    for (const match of lines[index].matchAll(decisionLiteral)) {
+      const allowance = findAllowance(repoPath, match[0], expression);
       if (allowance) allowance.actualCount += 1;
       else violations.push(`${repoPath}:${index + 1}:${expression}`);
     }

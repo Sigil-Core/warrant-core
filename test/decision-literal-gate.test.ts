@@ -28,7 +28,7 @@ describe('decision literal gate', () => {
       );
       writeFileSync(
         resolve(root, 'src/fixture.ts'),
-        `export const canonical = ${quoted(success)};\nexport const planted = ${staticTemplate(success)};\n`,
+        `export const canonical = ${quoted(success)};\nexport const planted = ${staticTemplate(`prefix-${success}-suffix`)};\n`,
       );
 
       const gate = resolve(process.cwd(), 'scripts/decision-literal-gate.mjs');
