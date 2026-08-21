@@ -67,6 +67,8 @@ jobs:
           fi
       - run: npm ci
       - run: npm run typecheck
+      - name: Decision literal advisory gate
+        run: npm run decision:gate
       - run: npm run test:node
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
