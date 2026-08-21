@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "runtimePaths": ["src", "test"],
+  "allowedOccurrences": [
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "APPROVED",
+      "expression": "status: \"APPROVED\" | \"PENDING\" | \"DENIED\";",
+      "expectedCount": 1,
+      "reason": "The frozen vector outcome remains the legacy emitter value in Wave 1."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "APPROVED",
+      "expression": "acceptedStatuses?: Array<\"APPROVED\" | \"ALLOWED\">;",
+      "expectedCount": 1,
+      "reason": "The compatibility vector accepts the permanent legacy input alias."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "ALLOWED",
+      "expression": "acceptedStatuses?: Array<\"APPROVED\" | \"ALLOWED\">;",
+      "expectedCount": 1,
+      "reason": "The compatibility vector accepts canonical success."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "APPROVED",
+      "expression": "expect([\"APPROVED\", \"PENDING\", \"DENIED\"]).toContain(vector.expected.status);",
+      "expectedCount": 1,
+      "reason": "The test validates frozen pre-flip vector outcomes."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "APPROVED",
+      "expression": "if (vector.expected.status === \"APPROVED\") {",
+      "expectedCount": 2,
+      "reason": "The test applies success-only assertions to frozen pre-flip vectors."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "APPROVED",
+      "expression": "expect(vector.expected.acceptedStatuses).toEqual([\"APPROVED\", \"ALLOWED\"]);",
+      "expectedCount": 1,
+      "reason": "The test pins the legacy-to-canonical compatibility pair."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "ALLOWED",
+      "expression": "expect(vector.expected.acceptedStatuses).toEqual([\"APPROVED\", \"ALLOWED\"]);",
+      "expectedCount": 1,
+      "reason": "The test pins the legacy-to-canonical compatibility pair."
+    },
+    {
+      "path": "test/runtime/launch-scenarios.test.ts",
+      "literal": "ALLOWED",
+      "expression": "expect(vector.expected.acceptedStatuses).toContain(\"ALLOWED\");",
+      "expectedCount": 1,
+      "reason": "Every success vector must accept canonical success."
+    },
+    {
+      "path": "test/vectors/launch-scenarios.json",
+      "literal": "APPROVED",
+      "expression": "\"status\": \"APPROVED\",",
+      "expectedCount": 3,
+      "reason": "Three frozen launch scenarios retain the pre-flip expected status."
+    },
+    {
+      "path": "test/vectors/launch-scenarios.json",
+      "literal": "APPROVED",
+      "expression": "\"acceptedStatuses\": [\"APPROVED\", \"ALLOWED\"],",
+      "expectedCount": 3,
+      "reason": "Each success vector documents the permanent legacy alias."
+    },
+    {
+      "path": "test/vectors/launch-scenarios.json",
+      "literal": "ALLOWED",
+      "expression": "\"acceptedStatuses\": [\"APPROVED\", \"ALLOWED\"],",
+      "expectedCount": 3,
+      "reason": "Each success vector documents canonical success."
+    },
+    {
+      "path": "test/vectors/launch-scenarios.json",
+      "literal": "APPROVED",
+      "expression": "\"decision\": \"APPROVED\",",
+      "expectedCount": 3,
+      "reason": "The frozen expected attestation payload remains pre-flip in Wave 1."
+    }
+  ]
+}

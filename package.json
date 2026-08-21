@@ -47,7 +47,9 @@
     "test:node": "vitest run --config vitest.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:workers": "vitest run --config vitest.workers.config.ts",
-    "test:sign-parity": "node scripts/verify-sigil-sign-parity.mjs"
+    "test:sign-parity": "node scripts/verify-sigil-sign-parity.mjs",
+    "decision:gate": "node scripts/decision-literal-gate.mjs",
+    "decision:gate:blocking": "node scripts/decision-literal-gate.mjs --blocking"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.8",

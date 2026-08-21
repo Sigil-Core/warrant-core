@@ -34,6 +34,8 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - name: Decision literal advisory gate
+        run: npm run decision:gate
       - run: npm test
       - run: npm run build
       - name: Pack the public artifact
