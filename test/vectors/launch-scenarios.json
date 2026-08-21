@@ -20,6 +20,7 @@
       "signedClearance": true,
       "expected": {
         "status": "APPROVED",
+        "acceptedStatuses": ["APPROVED", "ALLOWED"],
         "matchedRule": null,
         "errorCode": null
       },
@@ -122,6 +123,7 @@
       "signedClearance": true,
       "expected": {
         "status": "APPROVED",
+        "acceptedStatuses": ["APPROVED", "ALLOWED"],
         "matchedRule": null,
         "errorCode": null
       },
@@ -220,6 +222,7 @@
       "signedClearance": true,
       "expected": {
         "status": "APPROVED",
+        "acceptedStatuses": ["APPROVED", "ALLOWED"],
         "matchedRule": null,
         "errorCode": null
       },
