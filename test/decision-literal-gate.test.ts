@@ -1,23 +1,39 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 describe('decision literal gate', () => {
   it('keeps CI and publication on the blocking gate', () => {
-    for (const workflow of ['ci.yml', 'publish.yml']) {
-      const source = readFileSync(
-        resolve(process.cwd(), '.github', 'workflows', workflow),
-        'utf8',
-      );
-      const invocations = source
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith('run: npm run decision:gate'));
-      expect(invocations).toEqual(['run: npm run decision:gate:blocking']);
-      expect(source).not.toContain('Decision literal advisory gate');
+    const workflowDirectory = resolve(process.cwd(), '.github', 'workflows');
+    const invocations: string[] = [];
+    for (const workflow of readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/.test(name)).sort()) {
+      const document = parse(readFileSync(resolve(workflowDirectory, workflow), 'utf8')) as {
+        jobs?: Record<string, { steps?: Array<{ run?: unknown }> }>;
+      };
+      for (const job of Object.values(document.jobs ?? {})) {
+        for (const step of job.steps ?? []) {
+          if (typeof step.run !== 'string') continue;
+          for (const command of step.run.matchAll(/\bnpm\s+run\s+decision:gate(?::[\w-]+)?\b/g)) {
+            invocations.push(`${workflow}: ${command[0]}`);
+          }
+        }
+      }
     }
+    expect(invocations).toEqual([
+      'ci.yml: npm run decision:gate:blocking',
+      'publish.yml: npm run decision:gate:blocking',
+    ]);
   });
 
   it('fails closed on a planted unclassified occurrence while advisory mode reports it', () => {
