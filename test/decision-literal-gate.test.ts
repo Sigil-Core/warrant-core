@@ -1,10 +1,50 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 describe('decision literal gate', () => {
+  it('keeps CI and publication on the blocking gate', () => {
+    const workflowDirectory = resolve(process.cwd(), '.github', 'workflows');
+    const invocations: string[] = [];
+    for (const workflow of readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/.test(name)).sort()) {
+      const document = parse(readFileSync(resolve(workflowDirectory, workflow), 'utf8')) as {
+        jobs?: Record<string, { steps?: Array<{ run?: unknown }> }>;
+      };
+      for (const job of Object.values(document.jobs ?? {})) {
+        for (const step of job.steps ?? []) {
+          if (typeof step.run !== 'string') continue;
+          for (const command of step.run.matchAll(/\bnpm\s+run\s+decision:gate[\w:-]*/g)) {
+            invocations.push(`${workflow}: ${command[0]}`);
+          }
+        }
+      }
+    }
+    expect(invocations).toEqual([
+      'ci.yml: npm run decision:gate:blocking',
+      'publish.yml: npm run decision:gate:blocking',
+    ]);
+  });
+
+  it('binds the blocking alias to blocking mode', () => {
+    const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.['decision:gate:blocking']).toBe(
+      'node scripts/decision-literal-gate.mjs --blocking',
+    );
+  });
+
   it('fails closed on a planted unclassified occurrence while advisory mode reports it', () => {
     const root = mkdtempSync(join(tmpdir(), 'decision-literal-gate-'));
     const success = ['ALLOW', 'ED'].join('');
