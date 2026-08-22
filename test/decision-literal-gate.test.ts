@@ -1,10 +1,25 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('decision literal gate', () => {
+  it('keeps CI and publication on the blocking gate', () => {
+    for (const workflow of ['ci.yml', 'publish.yml']) {
+      const source = readFileSync(
+        resolve(process.cwd(), '.github', 'workflows', workflow),
+        'utf8',
+      );
+      const invocations = source
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('run: npm run decision:gate'));
+      expect(invocations).toEqual(['run: npm run decision:gate:blocking']);
+      expect(source).not.toContain('Decision literal advisory gate');
+    }
+  });
+
   it('fails closed on a planted unclassified occurrence while advisory mode reports it', () => {
     const root = mkdtempSync(join(tmpdir(), 'decision-literal-gate-'));
     const success = ['ALLOW', 'ED'].join('');
