@@ -24,7 +24,7 @@ describe('decision literal gate', () => {
       for (const job of Object.values(document.jobs ?? {})) {
         for (const step of job.steps ?? []) {
           if (typeof step.run !== 'string') continue;
-          for (const command of step.run.matchAll(/\bnpm\s+run\s+decision:gate(?::[\w-]+)?\b/g)) {
+          for (const command of step.run.matchAll(/\bnpm\s+run\s+decision:gate[\w:-]*/g)) {
             invocations.push(`${workflow}: ${command[0]}`);
           }
         }
@@ -34,6 +34,15 @@ describe('decision literal gate', () => {
       'ci.yml: npm run decision:gate:blocking',
       'publish.yml: npm run decision:gate:blocking',
     ]);
+  });
+
+  it('binds the blocking alias to blocking mode', () => {
+    const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    expect(packageJson.scripts?.['decision:gate:blocking']).toBe(
+      'node scripts/decision-literal-gate.mjs --blocking',
+    );
   });
 
   it('fails closed on a planted unclassified occurrence while advisory mode reports it', () => {
