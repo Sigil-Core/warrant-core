@@ -54,10 +54,10 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.8",
     "@types/node": "^22.16.5",
-    "@vitest/browser-playwright": "4.1.10",
+    "@vitest/browser-playwright": "4.1.11",
     "playwright": "1.62.0",
     "typescript": "^5.8.3",
-    "vitest": "4.1.10",
+    "vitest": "4.1.11",
     "yaml": "2.9.0"
   },
   "engines": {
@@ -67,5 +67,9 @@
     "esbuild": true,
     "fsevents": true,
     "workerd": true
+  },
+  "overrides": {
+    "undici": "7.30.0",
+    "sharp": "0.35.5"
   }
 }
